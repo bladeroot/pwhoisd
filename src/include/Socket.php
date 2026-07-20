@@ -72,7 +72,7 @@ class Socket {
 	 */
 	public function accept()
 	{
-		if (is_resource($this->socket))
+		if ($this->is_socket_resource($this->socket))
 		{
 			return @socket_accept($this->socket);
 		}
@@ -87,7 +87,7 @@ class Socket {
 	 */
 	public function close()
 	{
-		if (is_resource($this->socket))
+		if ($this->is_socket_resource($this->socket))
 		{
 			@socket_close($this->socket);
 
@@ -128,7 +128,7 @@ class Socket {
 	 */
 	protected function bind()
 	{
-		if (is_resource($this->socket))
+		if ($this->is_socket_resource($this->socket))
 		{
 			if (@socket_bind($this->socket, $this->listen_address, $this->listen_port) === FALSE)
 			{
@@ -147,7 +147,7 @@ class Socket {
 	 */
 	protected function listen()
 	{
-		if (is_resource($this->socket))
+		if ($this->is_socket_resource($this->socket))
 		{
 			if (@socket_listen($this->socket, 5) === FALSE)
 			{
@@ -158,6 +158,20 @@ class Socket {
 
 			Application::$log->info('Server listening on '.$this->listen_address.':'.$this->listen_port.'...');
 		}
+	}
+
+	/**
+	 * Checks whether a value is a usable socket handle.
+	 *
+	 * PHP 8+ represents sockets as \Socket objects instead of resources,
+	 * so is_resource() alone is no longer enough to detect a live socket.
+	 *
+	 * @param   mixed  $socket
+	 * @return  bool
+	 */
+	private function is_socket_resource($socket)
+	{
+		return is_resource($socket) OR $socket instanceof \Socket;
 	}
 
 } // end of class Socket
