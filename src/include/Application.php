@@ -188,6 +188,21 @@ class Application extends Daemon {
 			return;
 		}
 
+		// Deprecation notices (e.g. PHP 8.2+ dynamic properties) are forward
+		// looking warnings, not actual errors: log and continue instead of
+		// aborting, so the daemon keeps working across PHP versions.
+		if ($severity === E_DEPRECATED OR $severity === E_USER_DEPRECATED)
+		{
+			$log = Application::$log;
+
+			if (is_object($log))
+			{
+				$log->debug('PHP Deprecated: '.$message.'; file: '.$file.'; line: '.$line);
+			}
+
+			return;
+		}
+
 		throw new ErrorException('PHP Error: '.$message.'; file: '.$file.'; line: '.$line);
 	}
 
