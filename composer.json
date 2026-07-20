@@ -1,0 +1,34 @@
+{
+    "name": "hsdn/pwhoisd",
+    "type": "project",
+    "description": "PHP Whois Server Daemon",
+    "keywords": [
+        "php",
+        "whois",
+        "daemon"
+    ],
+    "homepage": "http://www.hsdn.org",
+    "license": "MIT",
+    "support": {
+        "email": "info@hsdn.org",
+        "source": "https://github.com/bladeroot/pwhoisd/",
+        "issues": "https://github.com/bladeroot/pwhoisd/issues"
+    },
+    "authors": [
+        {
+            "name": "Dmitry Shin",
+            "email": "info@hsdn.org",
+            "homepage": "http://www.hsdn.org"
+        },
+        {
+            "name": "Yurii Myronchuk",
+            "email": "bladeroot@gmail.com",
+            "homepage": "http://bladeroot.me"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "pwhoisd\\": "src"
+        }
+    }
+}
