@@ -189,6 +189,7 @@ abstract class ConfigAbstract implements ConfigInterface {
 	/**
 	 * {@inheritdoc}
 	 */
+	#[\ReturnTypeWillChange]
 	public function offsetSet($offset, $value)
 	{
 		$this->set($offset, $value);
@@ -197,6 +198,7 @@ abstract class ConfigAbstract implements ConfigInterface {
 	/**
 	 * {@inheritdoc}
 	 */
+	#[\ReturnTypeWillChange]
 	public function offsetExists($offset)
 	{
 		return $this->has($offset);
@@ -205,6 +207,7 @@ abstract class ConfigAbstract implements ConfigInterface {
 	/**
 	 * {@inheritdoc}
 	 */
+	#[\ReturnTypeWillChange]
 	public function offsetGet($offset)
 	{
 		return $this->get($offset);
@@ -213,6 +216,7 @@ abstract class ConfigAbstract implements ConfigInterface {
 	/**
 	 * {@inheritdoc}
 	 */
+	#[\ReturnTypeWillChange]
 	public function offsetUnset($offset)
 	{
 		$this->remove($offset);
