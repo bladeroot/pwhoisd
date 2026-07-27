@@ -11,8 +11,9 @@
     "license": "MIT",
     "support": {
         "email": "info@hsdn.org",
-        "source": "https://github.com/bladeroot/pwhoisd/",
-        "issues": "https://github.com/bladeroot/pwhoisd/issues"
+        "source": "https://github.com/hsdn/pwhoisd/",
+        "issues": "https://github.com/hsdn/pwhoisd/issues",
+        "wiki": "https://github.com/hsdn/pwhoisd/wiki"
     },
     "authors": [
         {
