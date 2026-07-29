@@ -42,7 +42,7 @@ class Client {
 	{
 		$this->socket = $socket;
 
-		@socket_getsockname($this->socket, $this->address, $this->port);
+		@socket_getpeername($this->socket, $this->address, $this->port);
 
 		Application::$log->debug('Socket assigned for client '.$this->address.':'.$this->port);
 		Application::$log->info('['.$this->address.'] Connected at port '.$this->port);
