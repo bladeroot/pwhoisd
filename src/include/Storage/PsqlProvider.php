@@ -54,6 +54,8 @@ class PsqlProvider implements StorageInterface {
         $this->client  = $client;
         $this->queries = $storage['queries'];
 
+        error_clear_last();
+
         $this->db = @pg_connect(implode(" ", [
             "dbname={$storage['db_name']}",
             "user={$storage['db_user']}",
@@ -62,12 +64,29 @@ class PsqlProvider implements StorageInterface {
             "port={$storage['db_port']}",
         ]));
 
-        if (empty($this->db))
+        if (!$this->is_pgsql_resource($this->db))
         {
-            throw new RuntimeException('Database connection error: '.$this->db->connect_error);
+            $error = error_get_last();
+            $message = isset($error['message']) ? preg_replace('/^pg_connect\(\):\s*/', '', $error['message']) : '';
+
+            throw new RuntimeException('Database connection error'.($message ? ': '.$message : ''));
         }
 
         Application::$log->debug('Database connected');
+    }
+
+    /**
+     * Checks whether a value is a usable PostgreSQL connection handle.
+     *
+     * PHP 8+ represents PostgreSQL connections as \PgSql\Connection objects
+     * instead of resources.
+     *
+     * @param   mixed  $db
+     * @return  bool
+     */
+    private function is_pgsql_resource($db)
+    {
+        return is_resource($db) OR $db instanceof \PgSql\Connection;
     }
 
     /**
@@ -77,7 +96,7 @@ class PsqlProvider implements StorageInterface {
      */
     public function __destruct()
     {
-        if ($this->db)
+        if ($this->is_pgsql_resource($this->db))
         {
             pg_close($this->db);
 
@@ -90,7 +109,7 @@ class PsqlProvider implements StorageInterface {
      */
     public function get($request)
     {
-        if (!$this->db)
+        if (!$this->is_pgsql_resource($this->db))
         {
             return FALSE;
         }

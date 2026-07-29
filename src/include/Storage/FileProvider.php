@@ -56,9 +56,14 @@ class FileProvider implements StorageInterface
         $this->queries = $storage['queries'];
         $this->path = $storage['storage'];
 
-        if (!file_exists($this->path))
+        if (!is_dir($this->path))
         {
             throw new RuntimeException('Path to files does not exist');
+        }
+
+        if (!is_readable($this->path))
+        {
+            throw new RuntimeException('Path to files is not readable');
         }
 
         Application::$log->debug('Path find');
@@ -111,11 +116,11 @@ class FileProvider implements StorageInterface
 
         $local_path = $this->colculatePath($md5);
         $path = $this->path . DIRECTORY_SEPARATOR . $local_path;
-        if (!file_exists($this->path . DIRECTORY_SEPARATOR . $local_path)) {
+        if (!is_readable($path)) {
             return [];
         }
 
-        return json_decode(file_get_contents($this->path . DIRECTORY_SEPARATOR . $local_path), true);
+        return json_decode(file_get_contents($path), true);
     }
 
     /**
