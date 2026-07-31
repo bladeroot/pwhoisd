@@ -44,23 +44,19 @@ class Storage {
 	{
 		$this->client  = $client;
 		$this->storage = $storage;
-
-		$this->load_provider();
 	}
 
 	/**
 	 * Gets response data from storage provider.
+	 *
+	 * Checked against the cache before the provider is even loaded, so a
+	 * cache hit never opens a database connection (or reads a file) at all.
 	 *
 	 * @param   string  $request  Requested search string
 	 * @return  array
 	 */
 	public function get($request)
 	{
-		if (is_null($this->provider))
-		{
-			return [];
-		}
-
 		$cache     = Application::$cache;
 		$cache_key = $cache->key($this->storage, $request);
 		$cached    = $cache->get($cache_key);
@@ -73,6 +69,13 @@ class Storage {
 		}
 
 		Application::$log->debug('Cache: MISS for "'.$request.'" (key '.$cache_key.')');
+
+		$this->load_provider();
+
+		if (is_null($this->provider))
+		{
+			return [];
+		}
 
 		$result = $this->provider->get($request);
 
