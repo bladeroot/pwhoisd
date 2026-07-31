@@ -36,8 +36,8 @@ class Client
 
         @socket_getpeername($this->socket, $this->address, $this->port);
 
-        Application::$log->debug('Socket assigned for client '.$this->address.':'.$this->port);
-        Application::$log->info('['.$this->address.'] Connected at port '.$this->port);
+        Application::$log->debug('Socket assigned for client ' . $this->address . ':' . $this->port);
+        Application::$log->info('[' . $this->address . '] Connected at port ' . $this->port);
     }
 
     /**
@@ -45,12 +45,12 @@ class Client
      */
     public function send(string $message): void
     {
-        $message = str_replace(["\r", "\n"], ['', "\r\n"], $message)."\r\n";
+        $message = str_replace(["\r", "\n"], ['', "\r\n"], $message) . "\r\n";
 
         @socket_write($this->socket, $message, strlen($message));
 
-        Application::$log->info('['.$this->address.'] Response sended (see debug)');
-        Application::$log->debug('Message writed to client socket: '.PHP_EOL.$message);
+        Application::$log->info('[' . $this->address . '] Response sended (see debug)');
+        Application::$log->debug('Message writed to client socket: ' . PHP_EOL . $message);
     }
 
     /**
@@ -62,8 +62,8 @@ class Client
             return null;
         }
 
-        Application::$log->info('['.$this->address.'] Request Recieved: '.trim($buffer));
-        Application::$log->debug('Request readed from client socket: '.$buffer);
+        Application::$log->info('[' . $this->address . '] Request Recieved: ' . trim($buffer));
+        Application::$log->debug('Request readed from client socket: ' . $buffer);
 
         return $buffer;
     }
@@ -77,7 +77,7 @@ class Client
         @socket_close($this->socket);
 
         Application::$log->debug('Client socket closed');
-        Application::$log->info('['.$this->address.'] Disconnected');
+        Application::$log->info('[' . $this->address . '] Disconnected');
     }
 
     /**

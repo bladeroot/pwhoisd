@@ -38,14 +38,14 @@ class Log extends LogAbstract
      */
     public function add(string $message, int $severity = self::info): void
     {
-        $message = '['.$this->severities[$severity][0].'] '.$message;
+        $message = '[' . $this->severities[$severity][0] . '] ' . $message;
 
         if ($severity < self::debug || $this->severity >= self::debug) {
             Console::log($message, $this->severities[$severity][1]);
         }
 
         if ($this->severity && $this->file && $severity <= $this->severity) {
-            @file_put_contents($this->file, '['.date('Y-m-d H:i:s').'] '.$message.PHP_EOL, FILE_APPEND);
+            @file_put_contents($this->file, '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL, FILE_APPEND);
         }
     }
 
@@ -60,7 +60,7 @@ class Log extends LogAbstract
 
         for ($i = 1; $i < count($trace); $i++) {
             if (isset($trace[$i]) && $class != $trace[$i]['class']) {
-                return preg_replace('/^'.__NAMESPACE__.'\\\/', '', $trace[$i]['class']);
+                return preg_replace('/^' . __NAMESPACE__ . '\\\/', '', $trace[$i]['class']);
             }
         }
 

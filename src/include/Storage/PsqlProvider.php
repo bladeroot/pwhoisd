@@ -56,7 +56,7 @@ class PsqlProvider implements StorageInterface
             $error = error_get_last();
             $message = isset($error['message']) ? preg_replace('/^pg_connect\(\):\s*/', '', $error['message']) : '';
 
-            throw new RuntimeException('Database connection error'.($message ? ': '.$message : ''));
+            throw new RuntimeException('Database connection error' . ($message ? ': ' . $message : ''));
         }
 
         Application::$log->debug('Database connected');
@@ -115,17 +115,17 @@ class PsqlProvider implements StorageInterface
             $result = pg_query($this->db, $query);
 
             if (!$result) {
-                throw new RuntimeException('Database query error: '.pg_last_error($this->db));
+                throw new RuntimeException('Database query error: ' . pg_last_error($this->db));
             }
 
             if (pg_num_rows($result)) {
                 $array = pg_fetch_assoc($result);
             }
 
-            Application::$log->debug('Database query was successful: '.$query);
+            Application::$log->debug('Database query was successful: ' . $query);
         }
 
-        Application::$log->debug('Execution time is '.(time() - $start).'s');
+        Application::$log->debug('Execution time is ' . (time() - $start) . 's');
 
         return $array;
     }
@@ -143,8 +143,8 @@ class PsqlProvider implements StorageInterface
         }
 
         foreach ($macros as $macro => $value) {
-            if (strpos($string, '{'.$macro.'}') !== false) {
-                $string = str_replace('{'.$macro.'}', pg_escape_string($this->db, mb_strtolower($value)), $string);
+            if (strpos($string, '{' . $macro . '}') !== false) {
+                $string = str_replace('{' . $macro . '}', pg_escape_string($this->db, mb_strtolower($value)), $string);
             }
         }
 

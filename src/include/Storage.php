@@ -41,12 +41,12 @@ class Storage
         $cached = $cache->get($cache_key);
 
         if (!is_null($cached)) {
-            Application::$log->debug('Cache: HIT for "'.$request.'" (key '.$cache_key.')');
+            Application::$log->debug('Cache: HIT for "' . $request . '" (key ' . $cache_key . ')');
 
             return $cached;
         }
 
-        Application::$log->debug('Cache: MISS for "'.$request.'" (key '.$cache_key.')');
+        Application::$log->debug('Cache: MISS for "' . $request . '" (key ' . $cache_key . ')');
 
         $this->load_provider();
 
@@ -75,14 +75,14 @@ class Storage
         }
 
         $type = $this->storage['type'];
-        $class = __NAMESPACE__.'\\Storage\\'.ucfirst($type).'Provider';
+        $class = __NAMESPACE__ . '\\Storage\\' . ucfirst($type) . 'Provider';
 
         if (!class_exists($class)) {
-            throw new RuntimeException('Storage provider class "'.$class.'" does not exists');
+            throw new RuntimeException('Storage provider class "' . $class . '" does not exists');
         }
 
         $this->provider = new $class($this->client, $this->storage);
 
-        Application::$log->debug('Storage provider "'.$type.'" is loaded');
+        Application::$log->debug('Storage provider "' . $type . '" is loaded');
     }
 }

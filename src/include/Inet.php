@@ -73,7 +73,7 @@ class Inet
             $bin = '';
 
             for ($bit = 15; $bit >= 0; $bit--) {
-                $bin = sprintf('%08b', ord($ip_n[$bit])).$bin;
+                $bin = sprintf('%08b', ord($ip_n[$bit])) . $bin;
             }
 
             return $bin;

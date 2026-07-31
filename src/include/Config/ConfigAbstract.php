@@ -28,7 +28,7 @@ abstract class ConfigAbstract implements ConfigInterface
             $this->setDotNotationKey($key, $value);
         } elseif (is_array($value) && $this->containsOnlyStringKeys($value)) {
             foreach ($value as $k => $v) {
-                $this->set($key.'.'.$k, $v);
+                $this->set($key . '.' . $k, $v);
             }
         } else {
             $this->data[$key] = $value;

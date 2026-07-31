@@ -38,7 +38,7 @@ abstract class Daemon
      */
     public function run(): void
     {
-        Application::$log->debug('Process run as UID/GID: '.posix_getuid().'/'.posix_getgid());
+        Application::$log->debug('Process run as UID/GID: ' . posix_getuid() . '/' . posix_getgid());
         Application::$server->initialize();
 
         // Transfer process in the background mode
@@ -111,7 +111,7 @@ abstract class Daemon
         }
 
         if (is_string(self::$arguments['pidfile'])) {
-            if (!@file_put_contents(self::$arguments['pidfile'], self::$pid.PHP_EOL)) {
+            if (!@file_put_contents(self::$arguments['pidfile'], self::$pid . PHP_EOL)) {
                 throw new RuntimeException('Can\'t create pid-file for process');
             }
 
@@ -144,7 +144,7 @@ abstract class Daemon
             case -1: throw new RuntimeException('Unable to fork process');
             case 0: break;
             default:
-                Application::$log->info('Process running in background mode on PID: '.$pid);
+                Application::$log->info('Process running in background mode on PID: ' . $pid);
                 exit;
         }
 

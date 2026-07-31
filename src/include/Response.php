@@ -104,9 +104,9 @@ abstract class Response
         foreach ($response_array as $field) {
             if (is_array($field)) {
                 if (isset($this->data_section['spacing']) && $this->data_section['spacing']) {
-                    $response[] = $field[0].' '.str_repeat(' ', $max_len - strlen($field[0])).$field[1];
+                    $response[] = $field[0] . ' ' . str_repeat(' ', $max_len - strlen($field[0])) . $field[1];
                 } else {
-                    $response[] = $field[0].$field[1];
+                    $response[] = $field[0] . $field[1];
                 }
             } else {
                 $response[] = $field;
@@ -192,14 +192,14 @@ abstract class Response
     {
         // System macro
         $macros = [
-            '_request_' => $this->request,
-            '_client_ip_' => $this->client->get_address(),
+            '_request_'     => $this->request,
+            '_client_ip_'   => $this->client->get_address(),
             '_client_port_' => $this->client->get_port(),
         ];
 
         // Messages based macro
         foreach (Application::$config->get('messages') as $message_key => $message_value) {
-            $macros['%'.$message_key.'%'] = $message_value;
+            $macros['%' . $message_key . '%'] = $message_value;
         }
 
         // Storage response macro
@@ -208,7 +208,7 @@ abstract class Response
         }
 
         foreach ($macros as $macro => $value) {
-            if ($value !== null && strpos($string, '{'.$macro.'}') !== false) {
+            if ($value !== null && strpos($string, '{' . $macro . '}') !== false) {
                 // Recursion
                 if (is_array($value)) {
                     if ($recursion === false) {
@@ -219,10 +219,10 @@ abstract class Response
                 }
 
                 if ($quote) {
-                    $value = '"'.$value.'"';
+                    $value = '"' . $value . '"';
                 }
 
-                $string = str_replace('{'.$macro.'}', $value, $string);
+                $string = str_replace('{' . $macro . '}', $value, $string);
             }
         }
 

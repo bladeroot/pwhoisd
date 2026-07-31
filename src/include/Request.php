@@ -106,8 +106,8 @@ class Request extends Response
      */
     private function find_flag(string $flag): bool
     {
-        if (preg_match('/\s+'.preg_quote($flag).'\s+/', ' '.$this->request.' ')) {
-            $this->request = preg_replace('/\s+'.preg_quote($flag).'\s+/', ' ', ' '.$this->request.' ', 1);
+        if (preg_match('/\s+' . preg_quote($flag) . '\s+/', ' ' . $this->request . ' ')) {
+            $this->request = preg_replace('/\s+' . preg_quote($flag) . '\s+/', ' ', ' ' . $this->request . ' ', 1);
             $this->request = trim($this->request);
 
             return true;

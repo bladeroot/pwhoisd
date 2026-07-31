@@ -125,7 +125,7 @@ class Application extends Daemon
      */
     public function exception_handler(Throwable $exception): void
     {
-        $message = get_class($exception).': '.$exception->getMessage();
+        $message = get_class($exception) . ': ' . $exception->getMessage();
         $log = Application::$log;
 
         if (is_object($log)) {
@@ -156,12 +156,12 @@ class Application extends Daemon
             $log = Application::$log;
 
             if (is_object($log)) {
-                $log->debug('PHP Deprecated: '.$message.'; file: '.$file.'; line: '.$line);
+                $log->debug('PHP Deprecated: ' . $message . '; file: ' . $file . '; line: ' . $line);
             }
 
             return true;
         }
 
-        throw new ErrorException('PHP Error: '.$message.'; file: '.$file.'; line: '.$line);
+        throw new ErrorException('PHP Error: ' . $message . '; file: ' . $file . '; line: ' . $line);
     }
 }

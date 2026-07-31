@@ -27,7 +27,7 @@ class FileCache implements CacheInterface
         $this->ttl = $ttl;
 
         if (!is_dir($this->path) && !@mkdir($this->path, 0700, true) && !is_dir($this->path)) {
-            throw new RuntimeException('could not create cache directory '.$this->path);
+            throw new RuntimeException('could not create cache directory ' . $this->path);
         }
     }
 
@@ -57,7 +57,7 @@ class FileCache implements CacheInterface
     public function set(string $key, array $value): void
     {
         $file = $this->fileFor($key);
-        $tmp = $file.'.'.uniqid('', true).'.tmp';
+        $tmp = $file . '.' . uniqid('', true) . '.tmp';
         $entry = json_encode(['expires_at' => time() + $this->ttl, 'value' => $value]);
 
         if (@file_put_contents($tmp, $entry, LOCK_EX) === false) {
@@ -71,6 +71,6 @@ class FileCache implements CacheInterface
 
     private function fileFor(string $key): string
     {
-        return $this->path.'/'.preg_replace('/[^A-Za-z0-9_.-]/', '_', $key).'.json';
+        return $this->path . '/' . preg_replace('/[^A-Za-z0-9_.-]/', '_', $key) . '.json';
     }
 }

@@ -59,7 +59,7 @@ abstract class LogAbstract implements LogInterface
      */
     public function debug(string $message): void
     {
-        $this->add($this->get_calling_class().': '.$message, self::debug);
+        $this->add($this->get_calling_class() . ': ' . $message, self::debug);
     }
 
     /**

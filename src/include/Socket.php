@@ -87,12 +87,12 @@ class Socket
         $this->socket = @socket_create($this->domain, SOCK_STREAM, SOL_TCP);
 
         if ($this->socket === false) {
-            throw new RuntimeException('Can\'t create socket: '.socket_strerror(socket_last_error()));
+            throw new RuntimeException('Can\'t create socket: ' . socket_strerror(socket_last_error()));
         }
 
         socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 1);
         socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO, [
-            'sec' => 3,
+            'sec'  => 3,
             'usec' => 0,
         ]);
 
@@ -108,7 +108,7 @@ class Socket
     {
         if ($this->is_socket_resource($this->socket)) {
             if (@socket_bind($this->socket, $this->listen_address, $this->listen_port) === false) {
-                throw new RuntimeException('Can\'t bind socket: '.socket_strerror(socket_last_error($this->socket)));
+                throw new RuntimeException('Can\'t bind socket: ' . socket_strerror(socket_last_error($this->socket)));
             }
 
             Application::$log->debug('Server socket binded');
@@ -124,12 +124,12 @@ class Socket
     {
         if ($this->is_socket_resource($this->socket)) {
             if (@socket_listen($this->socket, 5) === false) {
-                throw new RuntimeException('Can\'t listen: '.socket_strerror(socket_last_error($this->socket)));
+                throw new RuntimeException('Can\'t listen: ' . socket_strerror(socket_last_error($this->socket)));
             }
 
             @socket_set_nonblock($this->socket);
 
-            Application::$log->info('Server listening on '.$this->listen_address.':'.$this->listen_port.'...');
+            Application::$log->info('Server listening on ' . $this->listen_address . ':' . $this->listen_port . '...');
         }
     }
 

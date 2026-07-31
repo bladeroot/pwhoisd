@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -10,169 +10,129 @@
 namespace pWhoisd\Storage;
 
 use pWhoisd\Application;
+use pWhoisd\Client;
 use RuntimeException;
+use mysqli;
 
-class MysqlProvider implements StorageInterface {
+class MysqlProvider implements StorageInterface
+{
+    private Client $client;
 
-	/*
-	 * @var  object  Instance of \pWhoisd\Client class
-	 */
-	private $client;
+    private string $request = '';
 
-	/*
-	 * @var  array   Storage configuration segment
-	 */
-	private $storage;
+    private array $queries;
 
-	/*
-	 * @var  string  Request string
-	 */
-	private $request;
+    private array $result_array = [];
 
-	/*
-	 * @var  array   Array of SQL queries
-	 */
-	private $queries;
+    private mysqli $db;
 
-	/*
-	 * @var  array   SQL queries result array
-	 */
-	private $result_array = [];
+    /**
+     * Assigning class properties and connect to Database.
+     *
+     * @throws RuntimeException If MySQL Connection error
+     */
+    public function __construct(Client $client, array $storage)
+    {
+        $this->client = $client;
+        $this->queries = $storage['queries'];
 
+        $this->db = @new mysqli(
+            $storage['db_host'],
+            $storage['db_user'],
+            $storage['db_pass'],
+            $storage['db_name']
+        );
 
-	/**
-	 * Assigning class properties and connect to Database.
-	 *
-	 * @throws  \RuntimeException  If MySQL Connection error
-	 * @param   object  $client   Instance of \pWhoisd\Client class
-	 * @param   array   $storage  Storage configuration segment
-	 * @return  void
-	 */
-	public function __construct(\pWhoisd\Client $client, $storage)
-	{
-		$this->client  = $client;
-		$this->queries = $storage['queries'];
+        if ($this->db->connect_errno) {
+            throw new RuntimeException('Database connection error: ' . $this->db->connect_error);
+        } else {
+            $this->db->set_charset(Application::$config->get('storage.db_charset', 'utf8'));
+        }
 
-		$this->db = @ new \mysqli
-		(
-			$storage['db_host'],
-			$storage['db_user'],
-			$storage['db_pass'],
-			$storage['db_name']
-		);
+        Application::$log->debug('Database connected');
+    }
 
-		if ($this->db->connect_errno)
-		{
-			throw new RuntimeException('Database connection error: '.$this->db->connect_error);
-		}
-		else
-		{
-			$this->db->set_charset(Application::$config->get('storage.db_charset', 'utf8'));
-		}
+    /**
+     * Closes Database connection.
+     */
+    public function __destruct()
+    {
+        if (!$this->db->connect_errno) {
+            $this->db->close();
 
-		Application::$log->debug('Database connected');
-	}
+            Application::$log->debug('Database connection closed');
+        }
+    }
 
-	/**
-	 * Closes Database connection.
-	 *
-	 * @return  void
-	 */
-	public function __destruct()
-	{
-		if (!$this->db->connect_errno)
-		{
-			$this->db->close();
+    /**
+     * {@inheritdoc}
+     */
+    public function get(string $request): array|bool
+    {
+        if ($this->db->connect_errno) {
+            return false;
+        }
 
-			Application::$log->debug('Database connection closed');
-		}
-	}
+        $this->request = $request;
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function get($request)
-	{
-		if ($this->db->connect_errno)
-		{
-			return FALSE;
-		}
+        foreach ($this->queries as $query) {
+            if ($result = $this->query($query)) {
+                $this->result_array += $result;
+            }
+        }
 
-		$this->request = $request;
+        return $this->result_array;
+    }
 
-		foreach ($this->queries as $query)
-		{
-			if ($result = $this->query($query))
-			{
-				$this->result_array += $result;
-			}
-		}
+    /**
+     * Query database
+     */
+    private function query(string $query): array
+    {
+        $query = $this->process_query_string($query);
 
-		return $this->result_array;
-	}
+        $array = [];
 
-	/**
-	 * Query database
-	 *
-	 * @param   string  $table   Database table name
-	 * @return  void
-	 */
-	private function query($query)
-	{
-		$query = $this->process_query_string($query);
+        if ($query !== false) {
+            if (!$result = $this->db->query($query)) {
+                throw new RuntimeException('Database ' . __FUNCTION__ . ' qyery error: ' . $this->db->error);
+            }
 
-		$array = [];
+            if ($result->num_rows) {
+                $array = $result->fetch_array(MYSQLI_ASSOC);
+            }
 
-		if ($query !== FALSE)
-		{
-			if (!$result = $this->db->query($query))
-			{
-				throw new RuntimeException('Database '.__FUNCTION__.' qyery error: '.$this->db->error);
-			}
+            Application::$log->debug('Database ' . __FUNCTION__ . ' query was successful: ' . $query);
 
-			if ($result->num_rows)
-			{
-				$array = $result->fetch_array(MYSQLI_ASSOC);
-			}
+            $result->close();
+        }
 
-			Application::$log->debug('Database '.__FUNCTION__.' query was successful: '.$query);
+        return $array;
+    }
 
-			$result->close();
-		}
+    /**
+     * Process SQL query string.
+     */
+    private function process_query_string(string $string): string|false
+    {
+        // System macro
+        $macros = [
+            '_request_'     => str_replace(['%', '_'], '', $this->request),
+            '_client_ip_'   => $this->client->get_address(),
+            '_client_port_' => $this->client->get_port(),
+        ];
 
-		return $array;
-	}
+        // Storage response macro
+        if (!empty($this->result_array)) {
+            $macros += $this->result_array;
+        }
 
-	/**
-	 * Process SQL query string.
-	 *
-	 * @param   string  $string   SQL query string
-	 * @return  string|bool
-	 */
-	private function process_query_string($string)
-	{
-		// System macro
-		$macros = [
-			'_request_'     => str_replace(array('%', '_'), '', $this->request),
-			'_client_ip_'   => $this->client->get_address(),
-			'_client_port_' => $this->client->get_port(),
-		];
+        foreach ($macros as $macro => $value) {
+            if (strpos($string, '{' . $macro . '}') !== false) {
+                $string = str_replace('{' . $macro . '}', $this->db->real_escape_string($value), $string);
+            }
+        }
 
-		// Storage response macro
-		if (is_array($this->result_array) AND !empty($this->result_array))
-		{
-			$macros += $this->result_array;
-		}
-
-		foreach ($macros as $macro => $value)
-		{
-			if (strpos($string, '{'.$macro.'}') !== FALSE)
-			{
-				$string = str_replace('{'.$macro.'}', $this->db->real_escape_string($value), $string);
-			}
-		}
-
-		return !preg_match('/\{\w+\}/', $string) ? $string : FALSE;
-	}
-
-} // end of class MysqlProvider
+        return !preg_match('/\{\w+\}/', $string) ? $string : false;
+    }
+}

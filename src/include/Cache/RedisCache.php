@@ -31,7 +31,7 @@ class RedisCache implements CacheInterface
         $redis = new Redis();
 
         if (!$redis->connect($host, $port, 1.0)) {
-            throw new RuntimeException('could not connect to Redis at '.$host.':'.$port);
+            throw new RuntimeException('could not connect to Redis at ' . $host . ':' . $port);
         }
 
         if ($password) {
@@ -73,6 +73,6 @@ class RedisCache implements CacheInterface
 
     private function logFailure(Throwable $exception): void
     {
-        Application::$log->warning('Cache (redis): '.$exception->getMessage());
+        Application::$log->warning('Cache (redis): ' . $exception->getMessage());
     }
 }

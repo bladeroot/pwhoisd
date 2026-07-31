@@ -60,7 +60,7 @@ class Cache
     {
         $queries = $storage['queries'] ?? [];
 
-        return $this->prefix.md5(json_encode($queries).'|'.mb_strtolower($request));
+        return $this->prefix . md5(json_encode($queries) . '|' . mb_strtolower($request));
     }
 
     private function buildDriver(): CacheInterface
@@ -89,14 +89,14 @@ class Cache
 
             if ($driver === 'file') {
                 return new FileCache(
-                    (string) Application::$config->get('cache.path', sys_get_temp_dir().'/pwhoisd-cache'),
+                    (string) Application::$config->get('cache.path', sys_get_temp_dir() . '/pwhoisd-cache'),
                     $ttl
                 );
             }
 
-            throw new \RuntimeException('unknown cache driver "'.$driver.'"');
+            throw new \RuntimeException('unknown cache driver "' . $driver . '"');
         } catch (Throwable $exception) {
-            Application::$log->warning('Cache: disabled, could not initialize "'.$driver.'" driver: '.$exception->getMessage());
+            Application::$log->warning('Cache: disabled, could not initialize "' . $driver . '" driver: ' . $exception->getMessage());
 
             return new NullCache();
         }

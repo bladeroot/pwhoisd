@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -11,67 +11,43 @@
 namespace pWhoisd\Storage;
 
 use pWhoisd\Application;
+use pWhoisd\Client;
 use RuntimeException;
 
 class FileProvider implements StorageInterface
 {
+    private Client $client;
 
-    /*
-     * @var  object  Instance of \pWhoisd\Client class
-     */
-    private $client;
+    private string $request = '';
 
-    /*
-     * @var  array   Storage configuration segment
-     */
-    private $storage;
+    private array $queries;
 
-    /*
-     * @var  string  Request string
-     */
-    private $request;
+    private array $result_array = [];
 
-    /*
-     * @var  array   Array of SQL queries
-     */
-    private $queries;
-
-    /*
-     * @var  array   SQL queries result array
-     */
-    private $result_array = [];
-
+    private string $path;
 
     /**
      * Assigning class properties and connect to Database.
      *
-     * @throws  \RuntimeException  If Repository does not exist
-     * @param   object  $client   Instance of \pWhoisd\Client class
-     * @param   array   $storage  Storage configuration segment
-     * @return  void
+     * @throws RuntimeException If Repository does not exist
      */
-    public function __construct(\pWhoisd\Client $client, $storage)
+    public function __construct(Client $client, array $storage)
     {
-        $this->client  = $client;
+        $this->client = $client;
         $this->queries = $storage['queries'];
         $this->path = $storage['storage'];
 
-        if (!is_dir($this->path))
-        {
+        if (!is_dir($this->path)) {
             throw new RuntimeException('Path to files does not exist');
         }
 
-        if (!is_readable($this->path))
-        {
+        if (!is_readable($this->path)) {
             throw new RuntimeException('Path to files is not readable');
         }
 
         Application::$log->debug('Path find');
     }
 
-    /**
-     * @return  void
-     */
     public function __destruct()
     {
     }
@@ -79,19 +55,16 @@ class FileProvider implements StorageInterface
     /**
      * {@inheritdoc}
      */
-    public function get($request)
+    public function get(string $request): array|bool
     {
-        if (!$this->path)
-        {
-            return FALSE;
+        if (!$this->path) {
+            return false;
         }
 
         $this->request = $request;
 
-        foreach ($this->queries as $query)
-        {
-            if ($result = $this->query($query))
-            {
+        foreach ($this->queries as $query) {
+            if ($result = $this->query($query)) {
                 $this->result_array += $result;
             }
         }
@@ -101,13 +74,11 @@ class FileProvider implements StorageInterface
 
     /**
      * Find file with data
-     *
-     * @param   string  $table   Database table name
-     * @return  void
      */
-    private function query($query)
+    private function query(string $query): array
     {
         $query = $this->process_query_string($query);
+
         if ($query === false) {
             return [];
         }
@@ -116,54 +87,47 @@ class FileProvider implements StorageInterface
 
         $local_path = $this->colculatePath($md5);
         $path = $this->path . DIRECTORY_SEPARATOR . $local_path;
+
         if (!is_readable($path)) {
             return [];
         }
 
-        return json_decode(file_get_contents($path), true);
+        $decoded = json_decode(file_get_contents($path), true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**
      * Process query string.
-     *
-     * @param   string  $string
-     * @return  string|bool
      */
-    private function process_query_string($string)
+    private function process_query_string(string $string): string|false
     {
         // System macro
         $macros = [
-            '_request_'     => str_replace(array('%', '_'), '', $this->request),
+            '_request_'     => str_replace(['%', '_'], '', $this->request),
             '_client_ip_'   => $this->client->get_address(),
             '_client_port_' => $this->client->get_port(),
         ];
 
         // Storage response macro
-        if (is_array($this->result_array) AND !empty($this->result_array))
-        {
+        if (!empty($this->result_array)) {
             $macros += $this->result_array;
         }
 
-        foreach ($macros as $macro => $value)
-        {
-            if (strpos($string, '{'.$macro.'}') !== FALSE)
-            {
-                $string = str_replace('{'.$macro.'}', $value, $string);
+        foreach ($macros as $macro => $value) {
+            if (strpos($string, '{' . $macro . '}') !== false) {
+                $string = str_replace('{' . $macro . '}', $value, $string);
             }
         }
 
-        return !preg_match('/\{\w+\}/', $string) ? $string : FALSE;
+        return !preg_match('/\{\w+\}/', $string) ? $string : false;
     }
 
     /**
      * Calculate path to file
-     *
-     * @param string $md5
-     * @return string
      */
-    private function colculatePath($md5)
+    private function colculatePath(string $md5): string
     {
         return substr($md5, 0, 1) . DIRECTORY_SEPARATOR . substr($md5, 1, 1) . DIRECTORY_SEPARATOR . $md5;
     }
-
 }

@@ -38,11 +38,11 @@ class Autoloader
         }
 
         $namespace = substr($namespace, strlen(__NAMESPACE__) + 1);
-        $class_file = str_replace(['\\', '_'], DIRECTORY_SEPARATOR, $namespace.$class_name).'.php';
-        $class_path = INCLUDE_PATH.DIRECTORY_SEPARATOR.$class_file;
+        $class_file = str_replace(['\\', '_'], DIRECTORY_SEPARATOR, $namespace . $class_name) . '.php';
+        $class_path = INCLUDE_PATH . DIRECTORY_SEPARATOR . $class_file;
 
         if (!is_readable($class_path)) {
-            echo 'Unable to load file: '.$class_path."\n";
+            echo 'Unable to load file: ' . $class_path . "\n";
             exit;
         }
 

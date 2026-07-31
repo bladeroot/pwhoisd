@@ -83,7 +83,7 @@ class Security
 
         foreach (array_reverse($this->rules) as $rule) {
             if ($this->process_conditions($rule['conditions'])) {
-                $this->message = Application::$config->get('messages.'.$rule['message'], false);
+                $this->message = Application::$config->get('messages.' . $rule['message'], false);
                 $this->action = $rule['action'];
             }
         }
