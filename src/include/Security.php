@@ -43,6 +43,11 @@ class Security {
 	private $interval_pool = [];
 
 	/*
+	 * @var  array   Intervals presented during the current request, keyed by interval key
+	 */
+	private $intervals = [];
+
+	/*
 	 * @var  object  Instance of Client class
 	 */
 	private $client;
@@ -211,7 +216,10 @@ class Security {
 
 		$counter = $this->interval_check($seconds, $key);
 
-		$this->intervals[$key] = $seconds;
+		// $key is NULL for the global 'rate' policy (no per-client key) - array
+		// keys can't be NULL as of PHP 8.1, so normalize it the same way an
+		// unset array key would read back (empty string).
+		$this->intervals[$key ?? ''] = $seconds;
 
 		$variable = (float) $variable;
 
