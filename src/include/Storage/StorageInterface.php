@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -12,15 +12,12 @@ namespace pWhoisd\Storage;
 /**
  * Storage Interface.
  */
-interface StorageInterface {
-
-	/**
-	 * Gets storage search result.
-	 *
-	 * @param   string  $request  Search string
-	 * @return  array|bool
-	 */
-	public function get($request);
-
-
-} // end of interface StorageInterface
+interface StorageInterface
+{
+    /**
+     * Gets storage search result.
+     *
+     * @param string $request Search string
+     */
+    public function get(string $request): array|bool;
+}

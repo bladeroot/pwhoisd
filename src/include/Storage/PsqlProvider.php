@@ -133,8 +133,8 @@ class PsqlProvider implements StorageInterface
     private function processQueryString(string $string)
     {
         $macros = [
-            '_request_' => str_replace(['%', '_'], '', $this->request),
-            '_client_ip_' => $this->client->get_address(),
+            '_request_'     => str_replace(['%', '_'], '', $this->request),
+            '_client_ip_'   => $this->client->get_address(),
             '_client_port_' => $this->client->get_port(),
         ];
 

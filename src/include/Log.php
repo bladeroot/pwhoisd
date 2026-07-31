@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,77 +9,61 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Console;
+use pWhoisd\Log\LogAbstract;
 
 /**
  * Log class.
  */
-class Log extends Log\LogAbstract {
+class Log extends LogAbstract
+{
+    /**
+     * Returns instance of Log.
+     */
+    public static function factory(): self
+    {
+        return new self();
+    }
 
-	/**
-	 * Returns instance of Log.
-	 *
-	 * @return Config
-	 */
-	public static function factory()
-	{
-		return new self;
-	}
+    /**
+     * Assigning class properties.
+     */
+    public function __construct()
+    {
+        $this->severity = Application::$config->get('logging.severity', false);
+        $this->file = Application::$config->get('logging.file', false);
+    }
 
-	/**
-	 * Assigning class properties.
-	 *
-	 * @return  void
-	 */
-	public function __construct()
-	{
-		$this->severity = Application::$config->get('logging.severity', FALSE);
-		$this->file     = Application::$config->get('logging.file', FALSE);
-	}
+    /**
+     * Adds any message to log.
+     */
+    public function add(string $message, int $severity = self::info): void
+    {
+        $message = '['.$this->severities[$severity][0].'] '.$message;
 
-	/**
-	 * Adds any message to log.
-	 *
-	 * @param   string  $message   Message to write
-	 * @param   int     $severity  Message severity
-	 * @return  void
-	 */
-	public function add($message, $severity = self::info)
-	{
-		$message = '['.$this->severities[$severity][0].'] '.$message;
+        if ($severity < self::debug || $this->severity >= self::debug) {
+            Console::log($message, $this->severities[$severity][1]);
+        }
 
-		if ($severity < self::debug OR $this->severity >= self::debug)
-		{
-			Console::log($message, $this->severities[$severity][1]);
-		}
+        if ($this->severity && $this->file && $severity <= $this->severity) {
+            @file_put_contents($this->file, '['.date('Y-m-d H:i:s').'] '.$message.PHP_EOL, FILE_APPEND);
+        }
+    }
 
-		if ($this->severity AND $this->file AND $severity <= $this->severity)
-		{
-			@file_put_contents($this->file, '['.date('Y-m-d H:i:s').'] '.$message.PHP_EOL, FILE_APPEND);
-		}
-	}
+    /**
+     * Gets name of the calling method class
+     */
+    public function get_calling_class(): ?string
+    {
+        $trace = debug_backtrace();
 
-	/**
-	 * Gets name of the calling method class
-	 *
-	 * @return  string
-	 */
-	public function get_calling_class()
-	{
-		$trace = debug_backtrace();
+        $class = $trace[1]['class'];
 
-		$class = $trace[1]['class'];
+        for ($i = 1; $i < count($trace); $i++) {
+            if (isset($trace[$i]) && $class != $trace[$i]['class']) {
+                return preg_replace('/^'.__NAMESPACE__.'\\\/', '', $trace[$i]['class']);
+            }
+        }
 
-		for ($i = 1; $i < count($trace); $i++)
-		{
-			if (isset($trace[$i]))
-			{
-				if ($class != $trace[$i]['class'])
-				{
-					return preg_replace('/^'.__NAMESPACE__.'\\\/', '', $trace[$i]['class']);
-				}
-			}
-		}
-	}
-
-} // end of class Log
+        return null;
+    }
+}

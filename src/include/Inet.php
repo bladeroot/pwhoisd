@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -12,207 +12,167 @@ namespace pWhoisd;
 /**
  * Inet class.
  */
-class Inet {
+class Inet
+{
+    /*
+     * @const int Number of bits in the IPv4 address
+     */
+    const IPV4_BITS = 32;
 
-	/*
-	 * @const  int  Number of bits in the IPv4 address
-	 */
-	const IPV4_BITS = 32;
+    /*
+     * @const int Number of bits in the IPv6 address
+     */
+    const IPV6_BITS = 128;
 
-	/*
-	 * @const  int  Number of bits in the IPv6 address
-	 */
-	const IPV6_BITS = 128;
+    /**
+     * Convert an IP address to a long string
+     */
+    public static function ip2long(string $ip): string|int|false
+    {
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return false;
+        }
 
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $bin = self::ip2bin($ip);
 
-	/**
-	 * Convert an IP address to a long string
-	 *
-	 * @param   string
-	 * @return  string|bool
-	 */
-	public static function ip2long($ip)
-	{
-		if (!filter_var($ip, FILTER_VALIDATE_IP))
-		{
-			return FALSE;
-		}
+            if (function_exists('gmp_init')) {
+                return gmp_strval(gmp_init($bin, 2), 10);
+            } elseif (function_exists('bcadd')) {
+                $dec = '0';
 
-		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6))
-		{
-			$bin = self::ip2bin($ip);
+                for ($i = 0; $i < strlen($bin); $i++) {
+                    $dec = bcadd(bcmul($dec, '2', 0), $bin[$i], 0);
+                }
 
-			if (function_exists('gmp_init'))
-			{
-				return gmp_strval(gmp_init($bin, 2), 10);
-			}
-			elseif (function_exists('bcadd'))
-			{
-				$dec = '0';
+                return $dec;
+            }
 
-				for ($i = 0; $i < strlen($bin); $i++)
-				{
-					$dec = bcadd(bcmul($dec, '2', 0), $bin[$i], 0);
-				}
+            trigger_error('GMP or BCMATH extension not installed!', E_USER_ERROR);
 
-				return $dec;
-			}
+            return false;
+        }
 
-			trigger_error('GMP or BCMATH extension not installed!', E_USER_ERROR);
+        return @ip2long($ip);
+    }
 
-			return FALSE;
-		}
+    /**
+     * Converts an IP address to binary
+     */
+    public static function ip2bin(string $ip): string|false
+    {
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return false;
+        }
 
-		return @ip2long($ip);
-	}
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            if (($ip_n = inet_pton($ip)) === false) {
+                return false;
+            }
 
-	/**
-	 * Converts an IP address to binary
-	 *
-	 * @param   string
-	 * @param   bool
-	 * @return  string|bool
-	 */
-	public static function ip2bin($ip)
-	{
-		if (!filter_var($ip, FILTER_VALIDATE_IP))
-		{
-			return FALSE;
-		}
+            $bin = '';
 
-		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6))
-		{
-			if(($ip_n = inet_pton($ip)) === FALSE) 
-			{
-				return FALSE;
-			}
+            for ($bit = 15; $bit >= 0; $bit--) {
+                $bin = sprintf('%08b', ord($ip_n[$bit])).$bin;
+            }
 
-			$bin = '';
+            return $bin;
+        }
 
-			for ($bit = 15; $bit >= 0; $bit--)
-			{
-				$bin = sprintf('%08b', ord($ip_n[$bit])).$bin;
-			}
+        return base_convert((string) ip2long($ip), 10, 2);
+    }
 
-			return $bin;
-		}
+    /**
+     * Returns an array containing the IP address in the subnet
+     *
+     * @param string|array $subnets
+     * @param bool $return_all If you specify TRUE, returns the full list of entries
+     */
+    public static function ip_in_subnets(string $ip, string|array $subnets, bool $return_all = false): array|false
+    {
+        if (!is_array($subnets)) {
+            $subnets = [$subnets];
+        }
 
-		return base_convert(ip2long($ip), 10, 2);
-	}
+        $ip = self::ip2long($ip);
+        $all = [];
 
-	/**
-	 * Returns an array containing the IP address in the subnet
-	 *
-	 * @param   string
-	 * @param   array
-	 * @param   bool     If you specify TRUE, returns the full list of entries
-	 * @return  array|bool
-	 */
-	public static function ip_in_subnets($ip, $subnets, $return_all = FALSE)
-	{
-		if (!is_array($subnets))
-		{
-			$subnets = [$subnets];
-		}
+        foreach ($subnets as $subnet) {
+            $subnet = self::cidr2range($subnet);
 
-		$ip = self::ip2long($ip);
-		$all = [];
+            if (!$ip || !$subnet) {
+                continue;
+            }
 
-		foreach ($subnets as $subnet)
-		{
-			$subnet = self::cidr2range($subnet);
+            [$low, $high] = $subnet;
 
-			if (!$ip OR !$subnet)
-			{
-				continue;
-			}
+            if ($ip <= self::ip2long($high) && self::ip2long($low) <= $ip) {
+                if (!$return_all) {
+                    return $subnet;
+                }
 
-			list($low, $high) = $subnet;
+                $all[] = $subnet;
+            } elseif ($return_all) {
+                $all[] = false;
+            }
+        }
 
-			if ($ip <= self::ip2long($high) AND self::ip2long($low) <= $ip)
-			{
-				if (!$return_all)
-				{
-					return $subnet; 
-					
-					echo 1;
-				}
+        if ($return_all) {
+            return $all;
+        }
 
-				$all[] = $subnet;
-			}
-			elseif ($return_all)
-			{
-				$all[] = FALSE;
-			}
-		}
+        return false;
+    }
 
-		if ($return_all)
-		{
-			return $all;
-		}
+    /**
+     * Converts a CIDR block to range of addresses
+     */
+    public static function cidr2range(string $cidr): array|false
+    {
+        $cidr = explode('/', $cidr, 2);
+        $ip = $cidr[0];
 
-		return FALSE;
-	}
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $prefix_len = isset($cidr[1]) ? (int) $cidr[1] : self::IPV6_BITS;
 
-	/**
-	 * Converts a CIDR block to range of addresses
-	 *
-	 * @param   string
-	 * @return  array|bool
-	 */
-	public static function cidr2range($cidr)
-	{
-		$cidr = explode('/', $cidr, 2);
-		$ip = $cidr[0];
+            if ($prefix_len > self::IPV6_BITS) {
+                return false;
+            }
 
-		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6))
-		{
-			$prefix_len = isset($cidr[1]) ? $cidr[1] : self::IPV6_BITS;
+            $bits = self::IPV6_BITS - $prefix_len;
 
-			if ($prefix_len > self::IPV6_BITS) 
-			{
-				return FALSE;
-			}
+            $low_bin = inet_pton($ip);
+            $low_hex = unpack('H*', $low_bin);
+            $high_hex = reset($low_hex);
+            $pos = 31;
 
-			$bits = self::IPV6_BITS - $prefix_len;
+            while ($bits > 0) {
+                $val = hexdec(substr($high_hex, $pos, 1)) | (2 ** min(4, $bits) - 1);
+                $high_hex = substr_replace($high_hex, dechex((int) $val), $pos, 1);
 
-			$low_bin = inet_pton($ip);
-			$low_hex = unpack('H*', $low_bin);
-			$high_hex = reset($low_hex);
-			$pos = 31;
+                $bits -= 4;
+                $pos--;
+            }
 
-			while ($bits > 0)
-			{
-				$val = hexdec(substr($high_hex, $pos, 1)) | (pow(2, min(4, $bits)) - 1);
-				$high_hex = substr_replace($high_hex, dechex($val), $pos, 1);
+            $low = inet_ntop($low_bin);
+            $high = inet_ntop(pack('H*', $high_hex));
 
-				$bits -= 4;
-				$pos--;
-			}
+            return [$low, $high];
+        } elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            $prefix_len = isset($cidr[1]) ? (int) $cidr[1] : self::IPV4_BITS;
 
-			$low = inet_ntop($low_bin);
-			$high = inet_ntop(pack('H*', $high_hex));
+            if ($prefix_len > self::IPV4_BITS) {
+                return false;
+            }
 
-			return [$low, $high];
-		}
-		elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4))
-		{
-			$prefix_len = isset($cidr[1]) ? $cidr[1] : self::IPV4_BITS;
+            $bits = self::IPV4_BITS - $prefix_len;
 
-			if ($prefix_len > self::IPV4_BITS) 
-			{
-				return FALSE;
-			}
+            $low = long2ip((int) ip2long($ip) & (-1 << $bits));
+            $high = long2ip((int) ip2long($ip) + (2 ** $bits) - 1);
 
-			$bits = self::IPV4_BITS - $prefix_len;
+            return [$low, $high];
+        }
 
-			$low = long2ip(ip2long($ip) & (-1 << $bits));
-			$high = long2ip(ip2long($ip) + pow(2, $bits) - 1);
-
-			return [$low, $high];
-		}
-
-		return FALSE;
-	}
-
-} // end of class Inet
+        return false;
+    }
+}

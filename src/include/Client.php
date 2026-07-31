@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,112 +9,94 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
-
 /**
  * Client class.
  */
-class Client {
+class Client
+{
+    /*
+     * @var resource|\Socket Worker socket resource. Untyped: PHP has no
+     * "resource" type declaration, and PHP 8+ represents an accepted
+     * connection as a \Socket object instead.
+     */
+    private $socket;
 
-	/*
-	 * @var  resource  Worker socket resource
-	 */
-	private $socket;
+    private ?string $address = null;
 
-	/*
-	 * @var  string    Current client IP address
-	 */
-	private $address;
+    private ?int $port = null;
 
-	/*
-	 * @var  int       Current client port
-	 */
-	private $port;
+    /**
+     * Assigning class properties.
+     *
+     * @param resource|\Socket $socket Worker socket resource
+     */
+    public function __construct($socket)
+    {
+        $this->socket = $socket;
 
+        @socket_getpeername($this->socket, $this->address, $this->port);
 
-	/**
-	 * Assigning class properties.
-	 *
-	 * @param   object  $socket  Worker socket resource
-	 * @return  void
-	 */
-	public function __construct($socket)
-	{
-		$this->socket = $socket;
+        Application::$log->debug('Socket assigned for client '.$this->address.':'.$this->port);
+        Application::$log->info('['.$this->address.'] Connected at port '.$this->port);
+    }
 
-		@socket_getpeername($this->socket, $this->address, $this->port);
+    /**
+     * Writes message to socket
+     */
+    public function send(string $message): void
+    {
+        $message = str_replace(["\r", "\n"], ['', "\r\n"], $message)."\r\n";
 
-		Application::$log->debug('Socket assigned for client '.$this->address.':'.$this->port);
-		Application::$log->info('['.$this->address.'] Connected at port '.$this->port);
-	}
+        @socket_write($this->socket, $message, strlen($message));
 
-	/**
-	 * Writes message to socket
-	 *
-	 * @param   string  $message  Message to write
-	 * @return  void
-	 */
-	public function send($message)
-	{
-		$message = str_replace(["\r", "\n"], ['', "\r\n"], $message)."\r\n";
+        Application::$log->info('['.$this->address.'] Response sended (see debug)');
+        Application::$log->debug('Message writed to client socket: '.PHP_EOL.$message);
+    }
 
-		@socket_write($this->socket, $message, strlen($message));
+    /**
+     * Reads data from socket
+     */
+    public function read(int $len = 1024): ?string
+    {
+        if (($buffer = @socket_read($this->socket, $len, PHP_BINARY_READ)) === false) {
+            return null;
+        }
 
-		Application::$log->info('['.$this->address.'] Response sended (see debug)');
-		Application::$log->debug('Message writed to client socket: '.PHP_EOL.$message);
-	}
+        Application::$log->info('['.$this->address.'] Request Recieved: '.trim($buffer));
+        Application::$log->debug('Request readed from client socket: '.$buffer);
 
-	/**
-	 * Reads data from socket
-	 *
-	 * @param   int    $len  Read data length
-	 * @return  string
-	 */
-	public function read($len = 1024)
-	{
-		if (($buffer = @socket_read($this->socket, $len, PHP_BINARY_READ)) === FALSE)
-		{
-			return NULL;
-		}
+        return $buffer;
+    }
 
-		Application::$log->info('['.$this->address.'] Request Recieved: '.trim($buffer));
-		Application::$log->debug('Request readed from client socket: '.$buffer);
+    /**
+     * Shutdown and Closes Worker socket
+     */
+    public function close(): void
+    {
+        @socket_shutdown($this->socket);
+        @socket_close($this->socket);
 
-		return $buffer;
-	}
+        Application::$log->debug('Client socket closed');
+        Application::$log->info('['.$this->address.'] Disconnected');
+    }
 
-	/**
-	 * Shutdown and Closes Worker socket
-	 *
-	 * @return  void
-	 */
-	public function close()
-	{
-		@socket_shutdown($this->socket);
-		@socket_close($this->socket);
+    /**
+     * Gets current client IP address
+     *
+     * Falls back to an empty string (rather than null) if
+     * socket_getpeername() failed, since callers (Inet::ip_in_subnets(),
+     * Security's rate-limit keys) expect a plain string.
+     */
+    public function get_address(): string
+    {
+        return $this->address ?? '';
+    }
 
-		Application::$log->debug('Client socket closed');
-		Application::$log->info('['.$this->address.'] Disconnected');
-	}
-
-	/**
-	 * Gets current client IP address
-	 *
-	 * @return  string
-	 */
-	public function get_address()
-	{
-		return $this->address;
-	}
-
-	/**
-	 * Gets current client port
-	 *
-	 * @return  int
-	 */
-	public function get_port()
-	{
-		return $this->port;
-	}
-
-} // end of class Client
+    /**
+     * Gets current client port
+     */
+    public function get_port(): int
+    {
+        return $this->port ?? 0;
+    }
+}

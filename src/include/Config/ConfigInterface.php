@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,52 +9,44 @@
 
 namespace pWhoisd\Config;
 
+use ArrayAccess;
+
 /**
  * Config Interface.
  */
-interface ConfigInterface extends \ArrayAccess
+interface ConfigInterface extends ArrayAccess
 {
-	/**
-	 * Set one or more configuration values.
-	 *
-	 * @throws \InvalidArgumentException  If key must be a string or an associative array
-	 * @param  string|array $key    Config key value or array of keys and values.
-	 * @param  mixed        $value  Configuration value or null if $key is given an array.
-	 * @return self
-	 */
-	public function set($key, $value = NULL);
+    /**
+     * Set one or more configuration values.
+     *
+     * @param string|array $key   Config key value or array of keys and values.
+     * @param mixed        $value Configuration value or null if $key is given an array.
+     */
+    public function set(string|array $key, mixed $value = null): self;
 
-	/**
-	 * Check if a configuration value is set.
-	 *
-	 * @param  string $key  Confifuration key to check. If null if given it will check if any value is set at all.
-	 * @return bool   True if the key exists, false if not.
-	 */
-	public function has($key = NULL);
+    /**
+     * Check if a configuration value is set.
+     *
+     * @param string|null $key Configuration key to check. If null, checks whether any value is set at all.
+     */
+    public function has(?string $key = null): bool;
 
-	/**
-	 * Get a configuration value.
-	 *
-	 * @throws \RuntimeException  Specified key not found in configuration
-	 * @param  string $key     Configuration key whose value to get.
-	 * @param  mixed  $default Default value if the searched key is not found.
-	 * @return mixed  Matching Configuration value or $default if the key was not found.
-	 */
-	public function get($key = NULL, $default = NULL);
+    /**
+     * Get a configuration value.
+     *
+     * @throws \RuntimeException If the specified key is not found and no default is given
+     * @param string|null $key     Configuration key whose value to get.
+     * @param mixed       $default Default value if the searched key is not found.
+     */
+    public function get(?string $key = null, mixed $default = null): mixed;
 
-	/**
-	 * Remove a configuration value.
-	 *
-	 * @param  string  $key  Configuration key to remove.
-	 * @return self.
-	 */
-	public function remove($key);
+    /**
+     * Remove a configuration value.
+     */
+    public function remove(string $key): self;
 
-	/**
-	 * Clear all configuration values.
-	 *
-	 * @return void
-	 */
-	public function clear();
-
-} // end of interface ConfigInterface
+    /**
+     * Clear all configuration values.
+     */
+    public function clear(): void;
+}

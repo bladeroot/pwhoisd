@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -12,80 +12,77 @@ namespace pWhoisd\Log;
 /**
  * Abstract Log implementing LogInterface.
  */
-abstract class LogAbstract implements LogInterface {
+abstract class LogAbstract implements LogInterface
+{
+    /*
+     * @const int Error messages level
+     */
+    const error = 1;
 
-	/*
-	 * @const  int   Error messages level
-	 */
-	const error   = 1;
+    /*
+     * @const int Warning messages level
+     */
+    const warning = 2;
 
-	/*
-	 * @const  int   Warning messages level
-	 */
-	const warning = 2;
+    /*
+     * @const int Info messages level
+     */
+    const info = 3;
 
-	/*
-	 * @const  int   Info messages level
-	 */
-	const info   = 3;
+    /*
+     * @const int Debug messages level
+     */
+    const debug = 4;
 
-	/*
-	 * @const  int   Debug messages level
-	 */
-	const debug   = 4;
+    /*
+     * @var int|false Logging severity
+     */
+    protected int|false $severity = false;
 
-	/*
-	 * @var  int     Logging severity
-	 */
-	protected $severity;
+    /*
+     * @var string|false Logging file path
+     */
+    protected string|false $file = false;
 
-	/*
-	 * @var  string  Logging file path
-	 */
-	protected $path;
+    /*
+     * @var array Severity names
+     */
+    protected array $severities = [
+        self::debug   => ['debug', 'cyan'],
+        self::info    => ['info', 'green'],
+        self::warning => ['warning', 'yellow'],
+        self::error   => ['error', 'red'],
+    ];
 
-	/*
-	 * @var  array   Severity names
-	 */
-	protected $severities =
-	[
-		self::debug   => ['debug',   'cyan'],
-		self::info    => ['info',    'green'],
-		self::warning => ['warning', 'yellow'],
-		self::error   => ['error',   'red'],
-	];
+    /**
+     * {@inheritdoc}
+     */
+    public function debug(string $message): void
+    {
+        $this->add($this->get_calling_class().': '.$message, self::debug);
+    }
 
+    /**
+     * {@inheritdoc}
+     */
+    public function info(string $message): void
+    {
+        $this->add($message, self::info);
+    }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function debug($message)
-	{
-		$this->add($this->get_calling_class().': '.$message, self::debug);
-	}
+    /**
+     * {@inheritdoc}
+     */
+    public function warning(string $message): void
+    {
+        $this->add($message, self::warning);
+    }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function info($message)
-	{
-		$this->add($message, self::info);
-	}
-
-	/**
-	 * {@inheritdoc}
-	 */
-	public function warning($message)
-	{
-		$this->add($message, self::warning);
-	}
-
-	/**
-	 * {@inheritdoc}
-	 */
-	public function error($message)
-	{
-		$this->add($message, self::error);
-	}
-
-} // end of abstract class LogAbstract
+    /**
+     * {@inheritdoc}
+     */
+    public function error(string $message): void
+    {
+        $this->add($message, self::error);
+    }
+}

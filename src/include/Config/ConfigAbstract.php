@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,217 +9,144 @@
 
 namespace pWhoisd\Config;
 
-use pWhoisd\Config\ConfigInterface;
-use InvalidArgumentException;
 use RuntimeException;
 
 /**
  * Abstract Config implementing ConfigInterface.
  */
-abstract class ConfigAbstract implements ConfigInterface {
+abstract class ConfigAbstract implements ConfigInterface
+{
+    protected array $data = [];
 
-	/**
-	 * @var array Configuration data.
-	 */
-	protected $data = [];
+    public function set(string|array $key, mixed $value = null): self
+    {
+        if (is_array($key)) {
+            foreach ($key as $k => $v) {
+                $this->set($k, $v);
+            }
+        } elseif (strpos($key, '.') !== false) {
+            $this->setDotNotationKey($key, $value);
+        } elseif (is_array($value) && $this->containsOnlyStringKeys($value)) {
+            foreach ($value as $k => $v) {
+                $this->set($key.'.'.$k, $v);
+            }
+        } else {
+            $this->data[$key] = $value;
+        }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function set($key, $value = NULL)
-	{
-		if (is_array($key)) 
-		{
-			foreach ($key as $k => $v)
-			{
-				$this->set($k, $v);
-			}
-		}
-		elseif (is_string($key))
-		{
-			if (strpos($key, '.') !== FALSE)
-			{
-				$this->setDotNotationKey($key, $value);
-			}
-			else
-			{
-				if (is_array($value) AND $this->containsOnlyStringKeys($value)) 
-				{
-					foreach ($value as $k => $v)
-					{
-						$this->set($key.'.'.$k, $v);
-					}
-				} 
-				else 
-				{
-					$this->data[$key] = $value;
-				}
-			}
-		}
-		else
-		{
-			throw new InvalidArgumentException('Key must be a string or an associative array');
-		}
+        return $this;
+    }
 
-		return $this;
-	}
+    public function has(?string $key = null): bool
+    {
+        if (is_null($key)) {
+            return !empty($this->data);
+        }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function has($key = NULL)
-	{
-		if (is_null($key)) {
-			return !empty($this->data);
-		}
+        $segs = explode('.', $key);
+        $root = $this->data;
 
-		$segs = explode('.', $key);
-		$root = $this->data;
+        foreach ($segs as $part) {
+            if (!is_array($root) || !array_key_exists($part, $root)) {
+                return false;
+            }
 
-		// nested case
-		foreach ($segs as $part)
-		{
-			if (!array_key_exists($part, $root))
-			{
-				return FALSE;
-			}
+            $root = $root[$part];
+        }
 
-			$root = $root[$part];
-		}
+        return true;
+    }
 
-		return TRUE;
-	}
+    public function get(?string $key = null, mixed $default = null): mixed
+    {
+        if (is_null($key)) {
+            return $this->data;
+        }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function get($key = NULL, $default = NULL)
-	{
-		if (is_null($key))
-		{
-			return $this->data;
-		}
+        if (!$this->has($key)) {
+            if ($default === null) {
+                throw new RuntimeException('Specified key not found in configuration');
+            }
 
-		if (!$this->has($key))
-		{
-			if ($default === NULL)
-			{
-				throw new RuntimeException('Specified key not found in configuration');
-			}
+            return $default;
+        }
 
-			return $default;
-		}
+        $segs = explode('.', $key);
+        $root = $this->data;
 
-		$segs = explode('.', $key);
-		$root = $this->data;
+        foreach ($segs as $part) {
+            $root = $root[$part];
+        }
 
-		foreach ($segs as $part)
-		{
-			$root = $root[$part];
-		}
+        return $root;
+    }
 
-		return $root;
-	}
+    public function remove(string $key): self
+    {
+        if ($this->has($key)) {
+            $segs = explode('.', $key);
+            $root = &$this->data;
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function remove($key)
-	{
-		if ($this->has($key))
-		{
-			$segs = explode('.', $key);
-			$root = &$this->data;
+            foreach ($segs as $part) {
+                $parent = &$root;
+                $root = &$root[$part];
+            }
 
-			foreach ($segs as $part) 
-			{
-				$parent = &$root;
-				$root   = &$root[$part];
-			}
+            unset($parent[$part]);
+        }
 
-			unset($parent[$part]);
-		}
+        return $this;
+    }
 
-		return $this;
-	}
+    public function clear(): void
+    {
+        $this->data = [];
+    }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	public function clear()
-	{
-		$this->data = [];
-	}
+    /**
+     * Handle setting a configuration value with a dot notation key.
+     */
+    protected function setDotNotationKey(string $key, mixed $value): void
+    {
+        $splitKey = explode('.', $key);
+        $root = &$this->data;
 
-	/**
-	 * Handle setting a configuration value with a dot notation key.
-	 *
-	 * @param string $key   Dot notation key.
-	 * @param mixed  $value Configuration value.
-	 */
-	protected function setDotNotationKey($key, $value)
-	{
-		$splitKey = explode('.', $key);
-		$root	 = &$this->data;
+        while ($part = array_shift($splitKey)) {
+            if (!isset($root[$part]) && count($splitKey)) {
+                $root[$part] = [];
+            }
 
-		while ($part = array_shift($splitKey)) 
-		{
-			if (!isset($root[$part]) AND count($splitKey)) 
-			{
-				$root[$part] = [];
-			}
+            $root = &$root[$part];
+        }
 
-			$root = &$root[$part];
-		}
+        $root = $value;
+    }
 
-		$root = $value;
-	}
+    /**
+     * Check if an array contains only string keys.
+     */
+    protected function containsOnlyStringKeys(array $array): bool
+    {
+        return count($array) === count(array_filter(array_keys($array), 'is_string'));
+    }
 
-	/**
-	 * Check if an array contains only string keys.
-	 *
-	 * @param  array $array  Array to check.
-	 * @return bool  TRUE if array only contains string keys, FALSE if not.
-	 */
-	protected function containsOnlyStringKeys(array $array)
-	{
-		return count($array) === count(array_filter(array_keys($array), 'is_string'));
-	}
+    public function offsetSet(mixed $offset, mixed $value): void
+    {
+        $this->set($offset, $value);
+    }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	#[\ReturnTypeWillChange]
-	public function offsetSet($offset, $value)
-	{
-		$this->set($offset, $value);
-	}
+    public function offsetExists(mixed $offset): bool
+    {
+        return $this->has($offset);
+    }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	#[\ReturnTypeWillChange]
-	public function offsetExists($offset)
-	{
-		return $this->has($offset);
-	}
+    public function offsetGet(mixed $offset): mixed
+    {
+        return $this->get($offset);
+    }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	#[\ReturnTypeWillChange]
-	public function offsetGet($offset)
-	{
-		return $this->get($offset);
-	}
-
-	/**
-	 * {@inheritdoc}
-	 */
-	#[\ReturnTypeWillChange]
-	public function offsetUnset($offset)
-	{
-		$this->remove($offset);
-	}
-
-} // end of abstract class ConfigAbstract
+    public function offsetUnset(mixed $offset): void
+    {
+        $this->remove($offset);
+    }
+}

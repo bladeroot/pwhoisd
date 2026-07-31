@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,169 +9,138 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
 use RuntimeException;
 
 /**
  * Socket class.
  */
-class Socket {
+class Socket
+{
+    /*
+     * @var resource|\Socket|null Server socket resource. Untyped: PHP has no
+     * "resource" type declaration, and socket_create() returns a \Socket
+     * object on PHP 8+ but a resource on older PHP.
+     */
+    private $socket;
 
-	/*
-	 * @var  resource  Server socket resource
-	 */
-	private $socket;
+    private int $domain;
 
-	/*
-	 * @var  string    Listen IP address
-	 */
-	private $listen_address;
+    private string|false $listen_address;
 
-	/*
-	 * @var  int       Listen port
-	 */
-	private $listen_port;
+    private int $listen_port;
 
-	/*
-	 * @var  int       Socket domain
-	 */
-	private $domain;
+    /**
+     * Assigning class properties and create socket.
+     */
+    public function __construct(int $domain, string|false $listen_address, int $listen_port)
+    {
+        $this->domain = $domain;
+        $this->listen_address = $listen_address;
+        $this->listen_port = $listen_port;
+    }
 
+    /**
+     * Initialize server.
+     */
+    public function initialize(): void
+    {
+        if ($this->domain && $this->listen_address && $this->listen_port) {
+            $this->create();
+            $this->bind();
+            $this->listen();
+        }
+    }
 
-	/**
-	 * Assigning class properties and create socket.
-	 *
-	 * @return  void
-	 */
-	public function __construct($domain, $listen_address, $listen_port)
-	{
-		$this->domain         = $domain;
-		$this->listen_address = $listen_address;
-		$this->listen_port    = $listen_port;
-	}
+    /**
+     * Accept a socket connection.
+     *
+     * @return resource|\Socket|false
+     */
+    public function accept()
+    {
+        if ($this->is_socket_resource($this->socket)) {
+            return @socket_accept($this->socket);
+        }
 
-	/**
-	 * Initialize server.
-	 *
-	 * @return  void
-	 */
-	public function initialize()
-	{
-		if ($this->domain AND $this->listen_address AND $this->listen_port)
-		{
-			$this->create();
-			$this->bind();
-			$this->listen();
-		}
-	}
+        return false;
+    }
 
-	/**
-	 * Accept a socket connection.
-	 *
-	 * @return  bool
-	 */
-	public function accept()
-	{
-		if ($this->is_socket_resource($this->socket))
-		{
-			return @socket_accept($this->socket);
-		}
+    /**
+     * Closes a server socket resource.
+     */
+    public function close(): void
+    {
+        if ($this->is_socket_resource($this->socket)) {
+            @socket_close($this->socket);
 
-		return FALSE;
-	}
+            Application::$log->debug('Server socket closed');
+        }
+    }
 
-	/**
-	 * Closes a server socket resource.
-	 *
-	 * @return  void
-	 */
-	public function close()
-	{
-		if ($this->is_socket_resource($this->socket))
-		{
-			@socket_close($this->socket);
+    /**
+     * Creates a server socket resource and set socket options.
+     *
+     * @throws RuntimeException If error while creating socket
+     */
+    protected function create(): void
+    {
+        $this->socket = @socket_create($this->domain, SOCK_STREAM, SOL_TCP);
 
-			Application::$log->debug('Server socket closed');
-		}
-	}
+        if ($this->socket === false) {
+            throw new RuntimeException('Can\'t create socket: '.socket_strerror(socket_last_error()));
+        }
 
-	/**
-	 * Creates a server socket resource and set socket options.
-	 *
-	 * @throws  \RuntimeException  If error while creating socket
-	 * @return  void
-	 */
-	protected function create()
-	{
-		$this->socket = @socket_create($this->domain, SOCK_STREAM, SOL_TCP);
+        socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 1);
+        socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO, [
+            'sec' => 3,
+            'usec' => 0,
+        ]);
 
-		if ($this->socket === FALSE)
-		{
-			throw new RuntimeException('Can\'t create socket: '.socket_strerror(socket_last_error()));
-		}
+        Application::$log->debug('Server socket created');
+    }
 
-		socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 1);
-		socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO,
-		[
-			'sec'  => 3,
-			'usec' => 0
-		]);
+    /**
+     * Binds a server socket.
+     *
+     * @throws RuntimeException If error while binding socket
+     */
+    protected function bind(): void
+    {
+        if ($this->is_socket_resource($this->socket)) {
+            if (@socket_bind($this->socket, $this->listen_address, $this->listen_port) === false) {
+                throw new RuntimeException('Can\'t bind socket: '.socket_strerror(socket_last_error($this->socket)));
+            }
 
-		Application::$log->debug('Server socket created');
-	}
+            Application::$log->debug('Server socket binded');
+        }
+    }
 
-	/**
-	 * Binds a server socket.
-	 *
-	 * @throws  \RuntimeException  If error while binding socket
-	 * @return  void
-	 */
-	protected function bind()
-	{
-		if ($this->is_socket_resource($this->socket))
-		{
-			if (@socket_bind($this->socket, $this->listen_address, $this->listen_port) === FALSE)
-			{
-				throw new RuntimeException('Can\'t bind socket: '.socket_strerror(socket_last_error($this->socket)));
-			}
+    /**
+     * Listens for a connection on a server socket.
+     *
+     * @throws RuntimeException If error while listening socket
+     */
+    protected function listen(): void
+    {
+        if ($this->is_socket_resource($this->socket)) {
+            if (@socket_listen($this->socket, 5) === false) {
+                throw new RuntimeException('Can\'t listen: '.socket_strerror(socket_last_error($this->socket)));
+            }
 
-			Application::$log->debug('Server socket binded');
-		}
-	}
+            @socket_set_nonblock($this->socket);
 
-	/**
-	 * Listens for a connection on a server socket.
-	 *
-	 * @throws  \RuntimeException  If error while listening socket
-	 * @return  bool
-	 */
-	protected function listen()
-	{
-		if ($this->is_socket_resource($this->socket))
-		{
-			if (@socket_listen($this->socket, 5) === FALSE)
-			{
-				throw new RuntimeException('Can\'t listen: '.socket_strerror(socket_last_error($this->socket)));
-			}
+            Application::$log->info('Server listening on '.$this->listen_address.':'.$this->listen_port.'...');
+        }
+    }
 
-			@socket_set_nonblock($this->socket);
-
-			Application::$log->info('Server listening on '.$this->listen_address.':'.$this->listen_port.'...');
-		}
-	}
-
-	/**
-	 * Checks whether a value is a usable socket handle.
-	 *
-	 * PHP 8+ represents sockets as \Socket objects instead of resources,
-	 * so is_resource() alone is no longer enough to detect a live socket.
-	 *
-	 * @param   mixed  $socket
-	 * @return  bool
-	 */
-	private function is_socket_resource($socket)
-	{
-		return is_resource($socket) OR $socket instanceof \Socket;
-	}
-
-} // end of class Socket
+    /**
+     * Checks whether a value is a usable socket handle.
+     *
+     * PHP 8+ represents sockets as \Socket objects instead of resources,
+     * so is_resource() alone is no longer enough to detect a live socket.
+     */
+    private function is_socket_resource(mixed $socket): bool
+    {
+        return is_resource($socket) || $socket instanceof \Socket;
+    }
+}
