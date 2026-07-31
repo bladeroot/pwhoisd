@@ -74,7 +74,7 @@ class PsqlProvider implements StorageInterface
     /**
      * {@inheritdoc}
      */
-    public function get($request)
+    public function get(string $request): array|bool
     {
         if (!$this->isPgsqlResource($this->db)) {
             return false;
