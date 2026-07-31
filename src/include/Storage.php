@@ -67,10 +67,12 @@ class Storage {
 
 		if (!is_null($cached))
 		{
-			Application::$log->debug('Storage result served from cache');
+			Application::$log->debug('Cache: HIT for "'.$request.'" (key '.$cache_key.')');
 
 			return $cached;
 		}
+
+		Application::$log->debug('Cache: MISS for "'.$request.'" (key '.$cache_key.')');
 
 		$result = $this->provider->get($request);
 
