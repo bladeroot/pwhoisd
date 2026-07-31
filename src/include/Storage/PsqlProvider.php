@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -11,52 +11,40 @@
 namespace pWhoisd\Storage;
 
 use pWhoisd\Application;
+use pWhoisd\Client;
 use RuntimeException;
 
-class PsqlProvider implements StorageInterface {
+class PsqlProvider implements StorageInterface
+{
+    private Client $client;
 
-    /*
-     * @var  object  Instance of \pWhoisd\Client class
+    private array $storage;
+
+    private ?string $request = null;
+
+    private array $queries;
+
+    private array $resultArray = [];
+
+    /**
+     * @var resource|\PgSql\Connection
      */
-    private $client;
-
-    /*
-     * @var  array   Storage configuration segment
-     */
-    private $storage;
-
-    /*
-     * @var  string  Request string
-     */
-    private $request;
-
-    /*
-     * @var  array   Array of SQL queries
-     */
-    private $queries;
-
-    /*
-     * @var  array   SQL queries result array
-     */
-    private $result_array = [];
-
+    private $db;
 
     /**
      * Assigning class properties and connect to Database.
      *
-     * @throws  \RuntimeException  If PgSQL Connection error
-     * @param   object  $client   Instance of \pWhoisd\Client class
-     * @param   array   $storage  Storage configuration segment
-     * @return  void
+     * @throws RuntimeException If PgSQL connection error
      */
-    public function __construct(\pWhoisd\Client $client, $storage)
+    public function __construct(Client $client, array $storage)
     {
-        $this->client  = $client;
+        $this->client = $client;
+        $this->storage = $storage;
         $this->queries = $storage['queries'];
 
         error_clear_last();
 
-        $this->db = @pg_connect(implode(" ", [
+        $this->db = @pg_connect(implode(' ', [
             "dbname={$storage['db_name']}",
             "user={$storage['db_user']}",
             "password={$storage['db_pass']}",
@@ -64,8 +52,7 @@ class PsqlProvider implements StorageInterface {
             "port={$storage['db_port']}",
         ]));
 
-        if (!$this->is_pgsql_resource($this->db))
-        {
+        if (!$this->isPgsqlResource($this->db)) {
             $error = error_get_last();
             $message = isset($error['message']) ? preg_replace('/^pg_connect\(\):\s*/', '', $error['message']) : '';
 
@@ -75,29 +62,9 @@ class PsqlProvider implements StorageInterface {
         Application::$log->debug('Database connected');
     }
 
-    /**
-     * Checks whether a value is a usable PostgreSQL connection handle.
-     *
-     * PHP 8+ represents PostgreSQL connections as \PgSql\Connection objects
-     * instead of resources.
-     *
-     * @param   mixed  $db
-     * @return  bool
-     */
-    private function is_pgsql_resource($db)
-    {
-        return is_resource($db) OR $db instanceof \PgSql\Connection;
-    }
-
-    /**
-     * Closes Database connection.
-     *
-     * @return  void
-     */
     public function __destruct()
     {
-        if ($this->is_pgsql_resource($this->db))
-        {
+        if ($this->isPgsqlResource($this->db)) {
             pg_close($this->db);
 
             Application::$log->debug('Database connection closed');
@@ -109,85 +76,78 @@ class PsqlProvider implements StorageInterface {
      */
     public function get($request)
     {
-        if (!$this->is_pgsql_resource($this->db))
-        {
-            return FALSE;
+        if (!$this->isPgsqlResource($this->db)) {
+            return false;
         }
 
         $this->request = $request;
 
-        foreach ($this->queries as $query)
-        {
-            if ($result = $this->query($query))
-            {
-                $this->result_array += $result;
+        foreach ($this->queries as $query) {
+            if ($result = $this->query($query)) {
+                $this->resultArray += $result;
             }
         }
 
-        return $this->result_array;
+        return $this->resultArray;
     }
 
     /**
-     * Query database
+     * Checks whether a value is a usable PostgreSQL connection handle.
      *
-     * @param   string  $table   Database table name
-     * @return  void
+     * PHP 8+ represents PostgreSQL connections as \PgSql\Connection objects
+     * instead of resources.
+     *
+     * @param mixed $db
      */
-    private function query($query)
+    private function isPgsqlResource($db): bool
+    {
+        return is_resource($db) || $db instanceof \PgSql\Connection;
+    }
+
+    private function query(string $query): array
     {
         $start = time();
-        $query = $this->process_query_string($query);
+        $query = $this->processQueryString($query);
 
         $array = [];
 
         if ($query !== false) {
             $result = pg_query($this->db, $query);
+
             if (!$result) {
-                throw new RuntimeException('Database '.__FUNCTION__.' qyery error: '. pg_last_error($this->db));
+                throw new RuntimeException('Database query error: '.pg_last_error($this->db));
             }
 
-            if (pg_numrows($result)) {
-
+            if (pg_num_rows($result)) {
                 $array = pg_fetch_assoc($result);
             }
 
-            Application::$log->debug('Database '.__FUNCTION__.' query was successful: '.$query);
+            Application::$log->debug('Database query was successful: '.$query);
         }
-        $end = time();
-        Application::$log->debug('Execution time is ' . ($end - $start) . 's');
+
+        Application::$log->debug('Execution time is '.(time() - $start).'s');
+
         return $array;
     }
 
-    /**
-     * Process SQL query string.
-     *
-     * @param   string  $string   SQL query string
-     * @return  string|bool
-     */
-    private function process_query_string($string)
+    private function processQueryString(string $string)
     {
-        $start = time();
-        // System macro
         $macros = [
-            '_request_'     => str_replace(array('%', '_'), '', $this->request),
-            '_client_ip_'   => $this->client->get_address(),
+            '_request_' => str_replace(['%', '_'], '', $this->request),
+            '_client_ip_' => $this->client->get_address(),
             '_client_port_' => $this->client->get_port(),
         ];
 
-        // Storage response macro
-        if (is_array($this->result_array) AND !empty($this->result_array))
-        {
-            $macros += $this->result_array;
+        if (!empty($this->resultArray)) {
+            $macros += $this->resultArray;
         }
 
-        foreach ($macros as $macro => $value)
-        {
-            if (strpos($string, '{'.$macro.'}') !== FALSE)
-            {
+        foreach ($macros as $macro => $value) {
+            if (strpos($string, '{'.$macro.'}') !== false) {
                 $string = str_replace('{'.$macro.'}', pg_escape_string($this->db, mb_strtolower($value)), $string);
             }
         }
 
-        return !preg_match('/\{\w+\}/', $string) ? $string : FALSE;
+        return !preg_match('/\{\w+\}/', $string) ? $string : false;
     }
 }
