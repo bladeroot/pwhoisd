@@ -56,11 +56,27 @@ class Storage {
 	 */
 	public function get($request)
 	{
-		$result = [];
-
-		if (!is_null($this->provider))
+		if (is_null($this->provider))
 		{
-			$result = $this->provider->get($request);
+			return [];
+		}
+
+		$cache     = Application::$cache;
+		$cache_key = $cache->key($this->storage, $request);
+		$cached    = $cache->get($cache_key);
+
+		if (!is_null($cached))
+		{
+			Application::$log->debug('Storage result served from cache');
+
+			return $cached;
+		}
+
+		$result = $this->provider->get($request);
+
+		if (!empty($result))
+		{
+			$cache->set($cache_key, $result);
 		}
 
 		return $result;

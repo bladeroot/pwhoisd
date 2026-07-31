@@ -11,6 +11,7 @@ namespace pWhoisd;
 
 use pWhoisd\Console;
 use pWhoisd\Log;
+use pWhoisd\Cache;
 use pWhoisd\Config;
 use pWhoisd\Server;
 use RuntimeException;
@@ -32,6 +33,11 @@ class Application extends Daemon {
 	 * @var  object  Instance of Log class
 	 */
 	public static $log;
+
+	/*
+	 * @var  object  Instance of Cache class
+	 */
+	public static $cache;
 
 	/*
 	 * @var  object  Instance of Security class
@@ -65,6 +71,7 @@ class Application extends Daemon {
 
 		self::$config   = new Config;
 		self::$log      = new Log;
+		self::$cache    = new Cache;
 		self::$security = new Security;
 		self::$server   = new Server;
 
