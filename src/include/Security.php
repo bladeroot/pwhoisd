@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,390 +9,305 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
-use pWhoisd\Inet;
-
 /**
  * Security class.
  */
-class Security {
+class Security
+{
+    /*
+     * @const int One second period
+     */
+    const interval_second = 1;
 
-	/*
-	 * @const  int  One second period
-	 */
-	const interval_second = 1;
+    /*
+     * @const int One minute period
+     */
+    const interval_minute = 60;
 
-	/*
-	 * @const  int  One minute period
-	 */
-	const interval_minute = 60;
+    /*
+     * @const int One hour period
+     */
+    const interval_hour = 3600;
 
-	/*
-	 * @const  int  One hour period
-	 */
-	const interval_hour   = 3600;
+    /*
+     * @const int One day period
+     */
+    const interval_day = 86400;
 
-	/*
-	 * @const  int  One day period
-	 */
-	const interval_day    = 86400;
+    /*
+     * @var array Interval pools [[interval, time(), key, counter], ...]
+     */
+    private array $interval_pool = [];
 
-	/*
-	 * @var  array   Interval pools [[interval, time(), key, counter], ...]
-	 */
-	private $interval_pool = [];
+    /*
+     * @var array Intervals presented during the current request, keyed by interval key
+     */
+    private array $intervals = [];
 
-	/*
-	 * @var  array   Intervals presented during the current request, keyed by interval key
-	 */
-	private $intervals = [];
+    private ?Client $client = null;
 
-	/*
-	 * @var  object  Instance of Client class
-	 */
-	private $client;
+    private array $rules;
 
-	/*
-	 * @var  array   Access control rules
-	 */
-	private $rules;
+    private string|false|null $message = null;
 
-	/*
-	 * @var  string  Message sent to client
-	 */
-	private $message;
+    private ?string $action = null;
 
-	/*
-	 * @var  string  Last assigned action
-	 */
-	private $action;
+    /**
+     * Assigning class properties and parse rules configuration.
+     */
+    public function __construct()
+    {
+        $this->rules = Application::$config->get('security.rules');
 
+        $this->parse_rules();
+    }
 
-	/**
-	 * Assigning class properties and parse rules configuration.
-	 *
-	 * @return  void
-	 */
-	public function __construct()
-	{
-		$this->rules = Application::$config->get('security.rules');
+    /**
+     * Initialize security by client request.
+     */
+    public function initialize(Client $client): void
+    {
+        $this->client = $client;
 
-		$this->parse_rules();
-	}
+        $this->process_rules();
+    }
 
-	/**
-	 * Initialize security by client request.
-	 *
-	 * @param   object  $client  Instance of Client class
-	 * @return  void
-	 */
-	public function initialize(Client $client)
-	{
-		$this->client = $client;
+    /**
+     * Process defined access control rules.
+     */
+    private function process_rules(): void
+    {
+        $this->message = null;
+        $this->action = null;
+        $this->intervals = [];
 
-		$this->process_rules();
-	}
+        foreach (array_reverse($this->rules) as $rule) {
+            if ($this->process_conditions($rule['conditions'])) {
+                $this->message = Application::$config->get('messages.'.$rule['message'], false);
+                $this->action = $rule['action'];
+            }
+        }
 
-	/**
-	 * Process defined access control rules.
-	 *
-	 * @return  void
-	 */
-	private function process_rules()
-	{
-		$this->message   = NULL;
-		$this->action    = NULL;
-		$this->intervals = [];
+        // Update presented intervals
+        foreach ($this->intervals as $key => $interval) {
+            $this->interval_check($interval, $key, true);
+        }
+    }
 
-		foreach (array_reverse($this->rules) as $rule)
-		{
-			if ($this->process_conditions($rule['conditions']))
-			{
-				$this->message = Application::$config->get('messages.'.$rule['message'], FALSE);
-				$this->action  = $rule['action'];
-			}
-		}
+    /**
+     * Process rule condition.
+     */
+    private function process_conditions(array $conditions): bool
+    {
+        if (empty($conditions)) {
+            return true;
+        }
 
-		// Update presented intervals
-		foreach ($this->intervals as $key => $interval)
-		{
-			$this->interval_check($interval, $key, TRUE);
-		}
-	}
+        $client_address = $this->client->get_address();
 
-	/**
-	 * Process rule condition.
-	 *
-	 * @return  bool  TRUE if all rules is accepted
-	 */
-	private function process_conditions($conditions)
-	{
-		if (empty($conditions))
-		{
-			return TRUE;
-		}
+        $expressions = [true];
 
-		$client_address = $this->client->get_address();
+        foreach (['client_ip', 'requests', 'rate'] as $matched_condition) {
+            foreach ($conditions as $condition) {
+                $expression = null;
 
-		$expressions = [TRUE];
+                if ($condition['l'] != $matched_condition) {
+                    continue;
+                }
 
-		foreach (['client_ip', 'requests', 'rate'] as $matched_condition)
-		{
-			foreach ($conditions as $condition)
-			{
-				$expression = NULL;
+                switch ($condition['l']) {
+                    // Match client IP policy
+                    case 'client_ip':
+                        $expression = $this->compare_client_ip($condition['r']);
+                        break;
 
-				if ($condition['l'] != $matched_condition)
-				{
-					continue;
-				}
+                    // Client-based interval policy
+                    case 'requests':
+                        $expression = $this->compare_interval(
+                            $condition['op'],
+                            $condition['r'],
+                            $client_address
+                        );
+                        break;
 
-				switch ($condition['l'])
-				{
-					// Match client IP policy
-					case 'client_ip':
-						$expression =  $this->compare_client_ip($condition['r']);
-						break;
+                    // Global interval policy
+                    case 'rate':
+                        $expression = $this->compare_interval(
+                            $condition['op'],
+                            $condition['r']
+                        );
+                        break;
+                }
 
-					// Client-based interval policy
-					case 'requests':
-						$expression = $this->compare_interval
-						(
-							$condition['op'],
-							$condition['r'],
-							$client_address
-						);
-						break;
+                if ($expression !== null) {
+                    $expressions[] = $expression;
 
-					// Global interval policy
-					case 'rate':
-						$expression = $this->compare_interval
-						(
-							$condition['op'],
-							$condition['r']
-						);
-						break;
-				}
+                    if ($expression === false) {
+                        break 2; // stop conditions checking
+                    }
+                }
+            }
+        }
 
-				if ($expression !== NULL)
-				{
-					$expressions[] = $expression;
+        return (bool) min($expressions);
+    }
 
-					if ($expression === FALSE)
-					{
-						break 2; // stop conditions checking
-					}
-				}
-			}
-		}
+    /**
+     * Compares interval method.
+     */
+    private function compare_interval(string $op, string $variable, ?string $key = null): bool
+    {
+        @[$variable, $interval] = explode('/', $variable, 2);
 
-		return (bool) min($expressions);
-	}
+        switch ($interval) {
+            case 'sec': $seconds = self::interval_second; break;
+            case 'min': $seconds = self::interval_minute; break;
+            case 'hr':  $seconds = self::interval_hour;   break;
+            case 'day': $seconds = self::interval_day;    break;
+        }
 
-	/**
-	 * Compares interval method.
-	 *
-	 * @param   string  Compare operator
-	 * @param   string  Variable parameter (count/type)
-	 * @param   string  Interval key
-	 * @return  bool  TRUE if condition is accepted
-	 */
-	private function compare_interval($op, $variable, $key = NULL)
-	{
-		@list($variable, $interval) = explode('/', $variable, 2);
+        if (!isset($seconds) || empty($variable)) {
+            return false;
+        }
 
-		switch ($interval)
-		{
-			case 'sec': $seconds = self::interval_second; break;
-			case 'min': $seconds = self::interval_minute; break;
-			case 'hr' : $seconds = self::interval_hour;   break;
-			case 'day': $seconds = self::interval_day;    break;
-		}
+        $counter = $this->interval_check($seconds, $key);
 
-		if (!isset($seconds) OR empty($variable))
-		{
-			return FALSE;
-		}
+        // $key is NULL for the global 'rate' policy (no per-client key) - array
+        // keys can't be NULL as of PHP 8.1, so normalize it the same way an
+        // unset array key would read back (empty string).
+        $this->intervals[$key ?? ''] = $seconds;
 
-		$counter = $this->interval_check($seconds, $key);
+        $variable = (float) $variable;
 
-		// $key is NULL for the global 'rate' policy (no per-client key) - array
-		// keys can't be NULL as of PHP 8.1, so normalize it the same way an
-		// unset array key would read back (empty string).
-		$this->intervals[$key ?? ''] = $seconds;
+        switch ($op) {
+            case '==': return $counter == $variable;
+            case '!=': return $counter != $variable;
+            case '>=': return $counter >= $variable;
+            case '<=': return $counter <= $variable;
+            case '>': return $counter > $variable;
+            case '<': return $counter < $variable;
+        }
 
-		$variable = (float) $variable;
+        return false;
+    }
 
-		switch ($op)
-		{
-			case '==': return $counter == $variable;
-			case '!=': return $counter != $variable;
-			case '>=': return $counter >= $variable;
-			case '<=': return $counter <= $variable;
-			case '>' : return $counter >  $variable;
-			case '<' : return $counter <  $variable;
-		}
+    /**
+     * Compares IP address method.
+     *
+     * @param string|array $variable
+     */
+    private function compare_client_ip(string|array $variable): array|false
+    {
+        return Inet::ip_in_subnets($this->client->get_address(), $variable);
+    }
 
-		return FALSE;
-	}
+    /**
+     * Checks all intervals and returns current counter value.
+     */
+    private function interval_check(int $interval = self::interval_second, ?string $key = null, bool $update = false): int
+    {
+        $counter = false;
 
-	/**
-	 * Compares IP address method.
-	 *
-	 * @param   string|array  Variable parameter
-	 * @return  bool  TRUE if condition is accepted
-	 */
-	private function compare_client_ip($variable)
-	{
-		return Inet::ip_in_subnets($this->client->get_address(), $variable);
-	}
+        foreach ($this->interval_pool as $id => $element) {
+            if ($element[1] <= time() - $element[0]) {
+                unset($this->interval_pool[$id]);
 
-	/**
-	 * Checks all intervals and returns current counter value.
-	 *
-	 * @param   int     Interval type
-	 * @param   string  Interval key
-	 * @return  int
-	 */
-	private function interval_check($interval = self::interval_second, $key = NULL, $update = FALSE)
-	{
-		$counter = FALSE;
+                continue;
+            }
 
-		foreach ($this->interval_pool as $id => $element)
-		{
-			if ($element[1] <= time() - $element[0])
-			{
-				$this->interval_pool[$id] = NULL;
+            if ($element[0] == $interval && $element[2] == $key) {
+                if ($update) {
+                    $counter = ++$this->interval_pool[$id][3];
+                } else {
+                    $counter = $element[3];
+                }
+            }
+        }
 
-				unset($this->interval_pool[$id]);
+        if ($counter === false) {
+            $counter = 1;
 
-				continue;
-			}
+            if ($update) {
+                $this->interval_pool[] = [$interval, time(), $key, ++$counter];
+            }
+        }
 
-			if ($element[0] == $interval AND $element[2] == $key)
-			{
-				if ($update)
-				{
-					$counter = ++$this->interval_pool[$id][3];
-				}
-				else
-				{
-					$counter = $element[3];
-				}
-			}
-		}
+        return $counter;
+    }
 
-		if ($counter === FALSE)
-		{
-			$counter = 1;
+    /**
+     * Parse access control rules configuration.
+     */
+    private function parse_rules(): void
+    {
+        $rules = [];
 
-			if ($update)
-			{
-				$this->interval_pool[] = [$interval, time(), $key, ++$counter];
-			}
-		}
+        foreach ($this->rules as $id => $rule) {
+            if (!is_array($rule)) {
+                continue;
+            }
 
-		return $counter;
-	}
+            $rules[$id]['action'] = null;
+            $rules[$id]['message'] = null;
+            $rules[$id]['conditions'] = [];
 
-	/**
-	 * Parse access control rules configuration.
-	 *
-	 * @return  void
-	 */
-	private function parse_rules()
-	{
-		$rules = [];
+            foreach ($rule as $rule_part) {
+                // Assigning action
+                if (is_null($rules[$id]['action']) && ($rule_part == 'allow' || $rule_part == 'deny' || $rule_part == 'drop')) {
+                    $rules[$id]['action'] = $rule_part;
+                } elseif (is_null($rules[$id]['message']) && is_string($rule_part)) {
+                    // Assigning message
+                    $rules[$id]['message'] = $rule_part;
+                } elseif (is_array($rule_part) && sizeof($rule_part) >= 2) {
+                    // Assigning conditions
+                    $rules[$id]['conditions'][] = $this->parse_condition($rule_part);
+                }
+            }
 
-		foreach ($this->rules as $id => $rule)
-		{
-			if (!is_array($rule))
-			{
-				continue;
-			}
+            if (is_null($rules[$id]['action'])) {
+                unset($rules[$id]);
+            }
+        }
 
-			$rules[$id]['action']     = NULL;
-			$rules[$id]['message']    = NULL;
-			$rules[$id]['conditions'] = [];
+        $this->rules = $rules;
+    }
 
-			foreach ($rule as $rule_part)
-			{
-				// Assigning action
-				if (is_null($rules[$id]['action']) AND ($rule_part == 'allow' OR $rule_part == 'deny' OR $rule_part == 'drop'))
-				{
-					$rules[$id]['action'] = $rule_part;
-				}
+    /**
+     * Parse conditions in rule configuration.
+     */
+    private function parse_condition(array $condition_part): array
+    {
+        $condition = [];
 
-				// Assigning message
-				elseif (is_null($rules[$id]['message']) AND is_string($rule_part))
-				{
-					$rules[$id]['message'] = $rule_part;
-				}
+        if (sizeof($condition_part) >= 3) {
+            $condition['l'] = $condition_part[0];
+            $condition['op'] = $condition_part[1];
+            $condition['r'] = $condition_part[2];
+        } else {
+            $condition['l'] = $condition_part[0];
+            $condition['r'] = $condition_part[1];
+        }
 
-				// Assugning conditions
-				elseif (is_array($rule_part) AND sizeof($rule_part) >= 2)
-				{
-					$rules[$id]['conditions'][] = $this->parse_condition($rule_part);
-				}
-			}
+        if (!isset($condition['op']) || !in_array($condition['op'], ['==', '!=', '=<', '=>', '<', '>'])) {
+            $condition['op'] = '==';
+        }
 
-			if (is_null($rules[$id]['action']))
-			{
-				unset($rules[$id]);
-			}
-		}
+        return $condition;
+    }
 
-		$this->rules = $rules;
-	}
+    /**
+     * Gets message sent to client.
+     */
+    public function get_message(): string|false|null
+    {
+        return $this->message;
+    }
 
-	/**
-	 * Parse conditions in rule configuration.
-	 *
-	 * @param   array  Raw conditions array
-	 * @return  array
-	 */
-	private function parse_condition($condition_part)
-	{
-		$condition = [];
-
-		if (sizeof($condition_part) >= 3)
-		{
-			$condition['l']  = $condition_part[0];
-			$condition['op'] = $condition_part[1];
-			$condition['r']  = $condition_part[2];
-		}
-		else
-		{
-			$condition['l']  = $condition_part[0];
-			$condition['r']  = $condition_part[1];
-		}
-
-		if (!isset($condition['op']) OR !in_array($condition['op'], ['==', '!=', '=<', '=>', '<', '>']))
-		{
-			$condition['op'] = '==';
-		}
-
-		return $condition;
-	}
-
-	/**
-	 * Gets message sent to client.
-	 *
-	 * @return  string|NULL
-	 */
-	public function get_message()
-	{
-		return $this->message;
-	}
-
-	/**
-	 * Gets last assigned action.
-	 *
-	 * @return  string
-	 */
-	public function get_action()
-	{
-		return strtolower($this->action);
-	}
-
-} // end of class Security
+    /**
+     * Gets last assigned action.
+     */
+    public function get_action(): string
+    {
+        return strtolower($this->action ?? '');
+    }
+}

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,7 +9,6 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
 use pWhoisd\Config\ConfigAbstract;
 use InvalidArgumentException;
 use RuntimeException;
@@ -17,51 +16,43 @@ use RuntimeException;
 /**
  * Config class.
  */
-class Config extends Config\ConfigAbstract {
+class Config extends ConfigAbstract
+{
+    /**
+     * Returns instance of Config.
+     */
+    public static function factory(): self
+    {
+        return new self();
+    }
 
-	/**
-	 * Returns instance of Config.
-	 *
-	 * @return Config
-	 */
-	public static function factory()
-	{
-		return new self;
-	}
+    /**
+     * Assigning class properties.
+     */
+    public function __construct()
+    {
+        $this->load(realpath(Application::$arguments['config']));
+    }
 
-	/**
-	 * Assigning class properties.
-	 *
-	 * @return  void
-	 */
-	public function __construct()
-	{
-		$this->load(realpath(Application::$arguments['config']));
-	}
+    /**
+     * Load a configuration file.
+     *
+     * @throws InvalidArgumentException If $file is not a valid file.
+     * @throws RuntimeException         If $file does not return an array.
+     * @param string|false $file Path to php file which returns an array.
+     */
+    public function load(string|false $file): self
+    {
+        if (empty($file) || !file_exists($file)) {
+            throw new InvalidArgumentException('Configuration file must be a valid file.');
+        }
 
-	/**
-	 * Load a configuration file.
-	 *
-	 * @throws \InvalidArgumentException  If $file is not a valid file.
-	 * @throws \RuntimeException          If $file does not return an array.
-	 * @param  string  $file  Path to php file which returns an array.
-	 * @return self
-	 */
-	public function load($file)
-	{
-		if (empty($file) OR !file_exists($file))
-		{
-			throw new InvalidArgumentException('Configuration file must be a valid file.');
-		}
+        $data = include $file;
 
-		$data = include $file;
+        if (!is_array($data)) {
+            throw new RuntimeException('Configuration file did not return an array.');
+        }
 
-		if (!is_array($data))
-		{
-			throw new RuntimeException('Configuration file did not return an array.');
-		}
-
-		return $this->set($data);
-	}
-
-} // end of class Config
+        return $this->set($data);
+    }
+}

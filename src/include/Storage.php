@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,108 +9,80 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
 use RuntimeException;
 
 /**
  * Storage class.
  */
-class Storage {
+class Storage
+{
+    private Client $client;
 
-	/*
-	 * @var  object  Instance of Client class
-	 */
-	private $client;
+    private ?Storage\StorageInterface $provider = null;
 
-	/*
-	 * @var  object  Instance of Storage Provider class
-	 */
-	private $provider;
+    private array $storage;
 
-	/*
-	 * @var  array   Storage configuration segment
-	 */
-	private $storage;
+    public function __construct(Client $client, array $storage)
+    {
+        $this->client = $client;
+        $this->storage = $storage;
+    }
 
+    /**
+     * Gets response data from storage provider.
+     *
+     * Checked against the cache before the provider is even loaded, so a
+     * cache hit never opens a database connection (or reads a file) at all.
+     */
+    public function get(string $request): array|bool
+    {
+        $cache = Application::$cache;
+        $cache_key = $cache->key($this->storage, $request);
+        $cached = $cache->get($cache_key);
 
-	/**
-	 * Assigning class properties.
-	 *
-	 * @param   object  $client   Instance of Client class
-	 * @param   array   $storage  Storage configuration segment
-	 * @return  void
-	 */
-	public function __construct(Client $client, $storage)
-	{
-		$this->client  = $client;
-		$this->storage = $storage;
-	}
+        if (!is_null($cached)) {
+            Application::$log->debug('Cache: HIT for "'.$request.'" (key '.$cache_key.')');
 
-	/**
-	 * Gets response data from storage provider.
-	 *
-	 * Checked against the cache before the provider is even loaded, so a
-	 * cache hit never opens a database connection (or reads a file) at all.
-	 *
-	 * @param   string  $request  Requested search string
-	 * @return  array
-	 */
-	public function get($request)
-	{
-		$cache     = Application::$cache;
-		$cache_key = $cache->key($this->storage, $request);
-		$cached    = $cache->get($cache_key);
+            return $cached;
+        }
 
-		if (!is_null($cached))
-		{
-			Application::$log->debug('Cache: HIT for "'.$request.'" (key '.$cache_key.')');
+        Application::$log->debug('Cache: MISS for "'.$request.'" (key '.$cache_key.')');
 
-			return $cached;
-		}
+        $this->load_provider();
 
-		Application::$log->debug('Cache: MISS for "'.$request.'" (key '.$cache_key.')');
+        if (is_null($this->provider)) {
+            return [];
+        }
 
-		$this->load_provider();
+        $result = $this->provider->get($request);
 
-		if (is_null($this->provider))
-		{
-			return [];
-		}
+        if (!empty($result)) {
+            $cache->set($cache_key, $result);
+        }
 
-		$result = $this->provider->get($request);
+        return $result;
+    }
 
-		if (!empty($result))
-		{
-			$cache->set($cache_key, $result);
-		}
+    /**
+     * Loads storage provider class.
+     *
+     * @throws RuntimeException If storage provider class does not exists
+     */
+    private function load_provider(): void
+    {
+        if (empty($this->storage['type'])) {
+            return;
+        }
 
-		return $result;
-	}
+        $type = $this->storage['type'];
+        $class = __NAMESPACE__.'\\Storage\\'.ucfirst($type).'Provider';
 
-	/**
-	 * Loads storage provider class.
-	 *
-	 * @throws  \RuntimeException  If storage provider class does not exists
-	 * @return  void
-	 */
-	private function load_provider()
-	{
-		if (!isset($this->storage['type']) OR empty($this->storage['type']))
-		{
-			return;
-		}
+        if (!class_exists($class)) {
+            throw new RuntimeException('Storage provider class "'.$class.'" does not exists');
+        }
 
-		$type  = $this->storage['type'];
-		$class = __NAMESPACE__.'\\Storage\\'.ucfirst($type).'Provider';
+        $this->provider = new $class($this->client, $this->storage);
 
-		if (!class_exists($class))
-		{
-			throw new RuntimeException('Storage provider class "'.$class.'" does not exists');
-		}
-
-		$this->provider = new $class($this->client, $this->storage);
-
-		Application::$log->debug('Storage provider "'.$type.'" is loaded');
-	}
-
-} // end of class Storage
+        Application::$log->debug('Storage provider "'.$type.'" is loaded');
+    }
+}

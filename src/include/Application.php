@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,208 +9,159 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Console;
-use pWhoisd\Log;
-use pWhoisd\Cache;
-use pWhoisd\Config;
-use pWhoisd\Server;
 use RuntimeException;
 use ErrorException;
+use Throwable;
 
 define('PWHOISD_VERSION', '0.1.1b');
 
 /**
  * Application class.
  */
-class Application extends Daemon {
+class Application extends Daemon
+{
+    public static ?Config $config = null;
 
-	/*
-	 * @var  object  Instance of Config class
-	 */
-	public static $config;
+    public static ?Log $log = null;
 
-	/*
-	 * @var  object  Instance of Log class
-	 */
-	public static $log;
+    public static ?Cache $cache = null;
 
-	/*
-	 * @var  object  Instance of Cache class
-	 */
-	public static $cache;
+    public static ?Security $security = null;
 
-	/*
-	 * @var  object  Instance of Security class
-	 */
-	public static $security;
+    public static ?Server $server = null;
 
-	/*
-	 * @var  object  Instance of Server class
-	 */
-	public static $server;
+    /**
+     * Returns instance of Application.
+     */
+    public static function factory(): self
+    {
+        return new self();
+    }
 
+    /**
+     * Loads command-line arguments, configuration and Server class.
+     */
+    public function __construct()
+    {
+        $this->initialize();
 
-	/**
-	 * Returns instance of Application.
-	 *
-	 * @return Application
-	 */
-	public static function factory()
-	{
-		return new self;
-	}
+        self::$config = new Config();
+        self::$log = new Log();
+        self::$cache = new Cache();
+        self::$security = new Security();
+        self::$server = new Server();
 
-	/**
-	 * Loads command-line arguments, configuration and Server class.
-	 *
-	 * @return  void
-	 */
-	public function __construct()
-	{
-		$this->initialize();
+        if (!self::$arguments['daemon']) {
+            Console::head();
+        }
 
-		self::$config   = new Config;
-		self::$log      = new Log;
-		self::$cache    = new Cache;
-		self::$security = new Security;
-		self::$server   = new Server;
+        self::$log->debug('Configuration loaded');
+    }
 
-		if (!self::$arguments['daemon'])
-		{
-			Console::head();
-		}
+    /**
+     * Initialize application
+     */
+    private function initialize(): void
+    {
+        set_time_limit(0);
 
-		self::$log->debug('Configuration loaded');
-	}
+        $this->set_exception_handlers();
+        $this->test_dependencies();
+        $this->assign_arguments();
 
-	/**
-	 * Initialize application
-	 *
-	 * @return  void
-	 */
-	private function initialize()
-	{
-		set_time_limit(0);
+        if (!self::$arguments['daemon']) {
+            Console::help();
+        }
 
-		$this->set_exception_handlers();
-		$this->test_dependencies();
-		$this->assign_arguments();
+        if (self::$arguments['help']) {
+            exit;
+        }
 
-		if (!self::$arguments['daemon'])
-		{
-			Console::help();
-		}
+        $this->set_identifiers();
+        $this->set_signal_handlers();
+    }
 
-		if (self::$arguments['help'])
-		{
-			exit;
-		}
+    /**
+     * Sets exception and error handlers
+     */
+    private function set_exception_handlers(): void
+    {
+        set_exception_handler([$this, 'exception_handler']);
+        set_error_handler([$this, 'error_handler']);
+    }
 
-		$this->set_identifiers();
-		$this->set_signal_handlers();
-	}
+    /**
+     * Test application dependencies.
+     *
+     * @throws RuntimeException If require dependence
+     */
+    private function test_dependencies(): void
+    {
+        version_compare(PHP_VERSION, '5.4', '<') and die('Requires PHP 5.4 or newer.');
 
-	/**
-	 * Sets exception and error handlers
-	 *
-	 * @return  void
-	 */
-	private function set_exception_handlers()
-	{
-		set_exception_handler([$this, 'exception_handler']);
-		set_error_handler([$this, 'error_handler']);
-	}
+        if (!extension_loaded('posix')) {
+            throw new RuntimeException('Requires POSIX functions support (https://php.net/manual/en/posix.installation.php)');
+        }
 
-	/**
-	 * Test application dependencies.
-	 *
-	 * @throws  \RuntimeException  If require dependence
-	 * @return  void
-	 */
-	private function test_dependencies()
-	{
-		version_compare(PHP_VERSION, '5.4', '<') and die('Requires PHP 5.4 or newer.');
+        if (!extension_loaded('pcntl')) {
+            throw new RuntimeException('Requires PCNTL extension (http://www.php.net/manual/en/pcntl.installation.php)');
+        }
 
-		if (!extension_loaded('posix'))
-		{
-			throw new RuntimeException('Requires POSIX functions support (https://php.net/manual/en/posix.installation.php)');
-		}
+        if (!extension_loaded('filter')) {
+            throw new RuntimeException('Requires filter extension (http://www.php.net/manual/en/filter.installation.php)');
+        }
 
-		if (!extension_loaded('pcntl'))
-		{
-			throw new RuntimeException('Requires PCNTL extension (http://www.php.net/manual/en/pcntl.installation.php)');
-		}
+        if (!extension_loaded('gmp') && !extension_loaded('bcmath')) {
+            throw new RuntimeException('Requires GMP or BCMATH extension (http://www.php.net/manual/en/gmp.installation.php)');
+        }
 
-		if (!extension_loaded('filter'))
-		{
-			throw new RuntimeException('Requires filter extension (http://www.php.net/manual/en/filter.installation.php)');
-		}
+        if (!extension_loaded('sockets')) {
+            throw new RuntimeException('Requires sockets extension (http://www.php.net/manual/en/sockets.installation.php)');
+        }
+    }
 
-		if (!extension_loaded('gmp') AND !extension_loaded('bcmath'))
-		{
-			throw new RuntimeException('Requires GMP or BCMATH extension (http://www.php.net/manual/en/gmp.installation.php)');
-		}
+    /**
+     * Exception handler method.
+     */
+    public function exception_handler(Throwable $exception): void
+    {
+        $message = get_class($exception).': '.$exception->getMessage();
+        $log = Application::$log;
 
-		if (!extension_loaded('sockets'))
-		{
-			throw new RuntimeException('Requires sockets extension (http://www.php.net/manual/en/sockets.installation.php)');
-		}
-	}
+        if (is_object($log)) {
+            $log->error($message);
+        } else {
+            Console::log($message, 'red');
+        }
 
-	/**
-	 * Exception handler method.
-	 *
-	 * @return  void
-	 */
-	public function exception_handler(\Exception $exception)
-	{
-		$message = get_class($exception).': '.$exception->getMessage();
-		$log     = Application::$log;
+        // Terminate process if exception called before server loop
+        if (is_null(Application::$server) || Application::$server->listen_loop === false) {
+            Application::terminate(false);
+        }
+    }
 
-		if (is_object($log))
-		{
-			$log->error($message);
-		}
-		else
-		{
-			Console::log($message, 'red');
-		}
+    /**
+     * Error handler method.
+     */
+    public function error_handler(int $severity, string $message, string $file, int $line): bool
+    {
+        if (!(error_reporting() & $severity)) {
+            return false;
+        }
 
-		// Terminate process if exception called before server loop
-		if (is_null(Application::$server) OR Application::$server->listen_loop === FALSE)
-		{
-			Application::terminate(FALSE);
-		}
-	}
+        // Deprecation notices (e.g. PHP 8.2+ dynamic properties) are forward
+        // looking warnings, not actual errors: log and continue instead of
+        // aborting, so the daemon keeps working across PHP versions.
+        if ($severity === E_DEPRECATED || $severity === E_USER_DEPRECATED) {
+            $log = Application::$log;
 
-	/**
-	 * Error handler method.
-	 *
-	 * @return  void
-	 */
-	public function error_handler($severity, $message, $file, $line)
-	{
-		if (!(error_reporting() & $severity))
-		{
-			return;
-		}
+            if (is_object($log)) {
+                $log->debug('PHP Deprecated: '.$message.'; file: '.$file.'; line: '.$line);
+            }
 
-		// Deprecation notices (e.g. PHP 8.2+ dynamic properties) are forward
-		// looking warnings, not actual errors: log and continue instead of
-		// aborting, so the daemon keeps working across PHP versions.
-		if ($severity === E_DEPRECATED OR $severity === E_USER_DEPRECATED)
-		{
-			$log = Application::$log;
+            return true;
+        }
 
-			if (is_object($log))
-			{
-				$log->debug('PHP Deprecated: '.$message.'; file: '.$file.'; line: '.$line);
-			}
-
-			return;
-		}
-
-		throw new ErrorException('PHP Error: '.$message.'; file: '.$file.'; line: '.$line);
-	}
-
-} // end of class Application
+        throw new ErrorException('PHP Error: '.$message.'; file: '.$file.'; line: '.$line);
+    }
+}

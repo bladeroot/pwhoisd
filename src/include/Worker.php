@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,115 +9,86 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
-use pWhoisd\Request;
 use RuntimeException;
+use Exception;
 
 /**
  * Worker class.
  */
-class Worker {
+class Worker
+{
+    private Client $client;
 
-	/*
-	 * @var  object  Instance of Client class
-	 */
-	private $client;
+    private Request $request;
 
-	/*
-	 * @var  object  Instance of Request class
-	 */
-	private $request;
+    public function __construct(Client $client)
+    {
+        $this->client = $client;
+        $this->request = new Request($client);
+    }
 
+    /**
+     * Runs a worker to client request processing.
+     */
+    public function loop(): bool
+    {
+        $time = time() + 3;
 
-	/**
-	 * Assigning class properties.
-	 *
-	 * @param   object  $client    Instance of Client class
-	 * @return  void
-	 */
-	public function __construct(Client $client)
-	{
-		$this->client   = $client;
-		$this->request  = new Request($client);
-	}
+        while ($time > time()) {
+            $read = $this->client->read();
 
-	/**
-	 * Runs a worker to client request processing.
-	 *
-	 * @return  bool
-	 */
-	public function loop()
-	{
-		$time = time() + 3;
+            if ($read === null) {
+                continue;
+            }
 
-		while ($time > time())
-		{
-			$read = $this->client->read();
+            try {
+                if (Application::$security->get_action() == 'drop') {
+                    Application::$log->warning('Connection dropped by security');
 
-			if ($read === NULL)
-			{
-				continue;
-			}
+                    return true;
+                }
 
-			try
-			{
-				if (Application::$security->get_action() == 'drop')
-				{
-					Application::$log->warning('Connection dropped by security');
+                $this->request->set_request($read);
+                $this->request->process();
 
-					return TRUE;
-				}
+                if ($response = $this->request->get_response()) {
+                    $this->client->send($response);
+                }
+            } catch (Exception $e) {
+                $this->client->send('Internal error! Please try again later.');
 
-				$this->request->set_request($read);
-				$this->request->process();
+                throw new RuntimeException($e->getMessage());
+            }
 
-				if ($response = $this->request->get_response())
-				{
-					$this->client->send($response);
-				}
-			}
-			catch (\Exception $e)
-			{
-				$this->client->send('Internal error! Please try again later.');
+            return true;
+        }
 
-				throw new RuntimeException($e->getMessage());
-			}
+        Application::$log->warning('Request is not readed from client socket');
 
-			return TRUE;
-		}
+        return false;
+    }
 
-		Application::$log->warning('Request is not readed from client socket');
+    /**
+     * Waits on or returns the status of a forked worker process.
+     */
+    public function wait(): int
+    {
+        return pcntl_waitpid(-1, $status, WNOHANG);
+    }
 
-		return FALSE;
-	}
+    /**
+     * Forks the currently running worker process.
+     */
+    public function fork(): int
+    {
+        $pid = pcntl_fork();
 
-	/**
-	 * Waits on or returns the status of a forked worker process.
-	 *
-	 * @return  int
-	 */
-	public function wait()
-	{
-		return pcntl_waitpid(-1, $status, WNOHANG);
-	}
+        if ($pid == -1) {
+            $this->client->close();
 
-	/**
-	 * Forks the currently running worker process.
-	 *
-	 * @return  int
-	 */
-	public function fork()
-	{
-		$pid = pcntl_fork();
+            exit;
+        }
 
-		if ($pid == -1)
-		{
-			$this->client->close();
-
-			exit;
-		}
-
-		return $pid;
-	}
-
-} // end of class Worker
+        return $pid;
+    }
+}

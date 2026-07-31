@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,169 +9,135 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
-use pWhoisd\Socket;
-use pWhoisd\Client;
-use pWhoisd\Worker;
+use Exception;
 use RuntimeException;
 
 /**
  * Server class.
  */
-class Server {
+class Server
+{
+    private Socket $socket;
 
-	/*
-	 * @var  object    Instance of Socket class for IPv4 connections
-	 */
-	private $socket;
+    private Socket $socket_ipv6;
 
-	/*
-	 * @var  object    Instance of Socket class for IPv6 connections
-	 */
-	private $socket_ipv6;
+    public bool $listen_loop = false;
 
-	/*
-	 * @var  string    Server is now processing
-	 */
-	public $listen_loop;
+    /**
+     * Assigning class properties and create socket.
+     */
+    public function __construct()
+    {
+        $listen_port = Application::$config->get('daemon.listen_port', 43);
 
+        $this->socket = new Socket(AF_INET, Application::$config->get('daemon.listen_address', false), $listen_port);
+        $this->socket_ipv6 = new Socket(AF_INET6, Application::$config->get('daemon.listen_address_ipv6', false), $listen_port);
+    }
 
-	/**
-	 * Assigning class properties and create socket.
-	 *
-	 * @return  void
-	 */
-	public function __construct()
-	{
-		$this->listen_loop = FALSE;
+    /**
+     * Initialize server.
+     */
+    public function initialize(): void
+    {
+        $this->socket->initialize();
+        $this->socket_ipv6->initialize();
+    }
 
-		$listen_port = Application::$config->get('daemon.listen_port', 43);
+    /**
+     * Runs a main loop for accepting server requests.
+     *
+     * @throws RuntimeException If error while accept connections
+     * @throws RuntimeException If error called in Worker
+     */
+    public function loop(): void
+    {
+        Application::$log->info('Server ready to accept connections');
 
-		$this->socket      = new Socket(AF_INET,  Application::$config->get('daemon.listen_address', FALSE), $listen_port);
-		$this->socket_ipv6 = new Socket(AF_INET6, Application::$config->get('daemon.listen_address_ipv6', FALSE), $listen_port);
-	}
+        $this->listen_loop = true;
 
-	/**
-	 * Initialize server.
-	 *
-	 * @return  void
-	 */
-	public function initialize()
-	{
-		$this->socket->initialize();
-		$this->socket_ipv6->initialize();
-	}
+        $worker_processes = [];
 
-	/**
-	 * Runs a main loop for accepting server requests.
-	 *
-	 * @throws  \RuntimeException  If error while accept connections
-	 * @throws  \RuntimeException  If error called in Worker
-	 * @return  void
-	 */
-	public function loop()
-	{
-		Application::$log->info('Server ready to accept connections');
+        while ($this->listen_loop) {
+            Application::tick();
 
-		$this->listen_loop = TRUE;
+            if (($client_socket = $this->accept()) === false) {
+                continue;
+            }
 
-		$worker_processes = [];
+            Application::$log->debug('Server socket accept new connection');
+            Application::$log->debug('Client socket created');
 
-		while ($this->listen_loop)
-		{
-			Application::tick();
+            $client = new Client($client_socket);
+            $worker = new Worker($client);
 
-			if (($client_socket = $this->accept()) === FALSE)
-			{
-				continue;
-			}
+            while ($pid = $worker->wait()) {
+                if ($pid == -1) {
+                    $worker_processes = [];
 
-			Application::$log->debug('Server socket accept new connection');
-			Application::$log->debug('Client socket created');
+                    break;
+                }
 
-			$client = new Client($client_socket);
-			$worker = new Worker($client);
+                unset($worker_processes[$pid]);
 
-			while ($pid = $worker->wait())
-			{
-				if ($pid == -1)
-				{
-					$worker_processes = [];
+                // Forces collection of any existing garbage cycles
+                gc_collect_cycles();
+            }
 
-					break;
-				}
+            if (count($worker_processes) > Application::$config->get('daemon.workers')) {
+                Application::$log->warning('Workers limit exceded');
 
-				unset($worker_processes[$pid]);
+                $client->close();
 
-				// Forces collection of any existing garbage cycles
-				gc_collect_cycles();
-			}
+                continue;
+            }
 
-			if (count($worker_processes) > Application::$config->get('daemon.workers'))
-			{
-				Application::$log->warning('Workers limit exceded');
+            try {
+                Application::$security->initialize($client);
 
-				$client->close();
+                if ($pid = $worker->fork()) {
+                    $worker_processes[$pid] = true;
 
-				continue;
-			}
+                    Application::$log->debug('Worker process created');
 
-			try
-			{
-				Application::$security->initialize($client);
+                    continue;
+                }
 
-				if ($pid = $worker->fork())
-				{
-					$worker_processes[$pid] = TRUE;
+                $worker->loop();
+                $client->close();
 
-					Application::$log->debug('Worker process created');
+                Application::$log->debug('Worker process terminated');
 
-					continue;
-				}
+                exit;
+            } catch (Exception $e) {
+                $client->close();
 
-				$worker->loop();
-				$client->close();
+                throw new RuntimeException($e->getMessage());
+            }
+        }
+    }
 
-				Application::$log->debug('Worker process terminated');
+    /**
+     * Closes a server socket resource.
+     */
+    public function close(): void
+    {
+        $this->socket->close();
+        $this->socket_ipv6->close();
+    }
 
-				exit;
-			}
-			catch (\Exception $e)
-			{
-				$client->close();
+    /**
+     * Accept connection
+     *
+     * @return resource|\Socket|false
+     */
+    private function accept()
+    {
+        if (($socket = $this->socket->accept()) === false) {
+            if (($socket = $this->socket_ipv6->accept()) === false) {
+                return false;
+            }
+        }
 
-				throw new RuntimeException($e->getMessage());
-			}
-		}
-	}
-
-	/**
-	 * Closes a server socket resource.
-	 *
-	 * @return  void
-	 */
-	public function close()
-	{
-		$this->socket->close();
-		$this->socket_ipv6->close();
-	}
-
-	/**
-	 * Accept connection
-	 *
-	 * @return  resource|bool
-	 */
-	private function accept()
-	{
-		if (($socket = $this->socket->accept()) === FALSE)
-		{
-			if (($socket = $this->socket_ipv6->accept()) === FALSE)
-			{
-				return FALSE;
-			}
-		}
-
-		return $socket;
-	}
-
-} // end of class Server
+        return $socket;
+    }
+}

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,159 +9,118 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
-use pWhoisd\Storage;
-
 /**
  * Request class.
  */
-class Request extends Response {
+class Request extends Response
+{
+    protected Client $client;
 
-	/*
-	 * @var  object  Instance of Client class
-	 */
-	protected $client;
+    public function __construct(Client $client)
+    {
+        $this->client = $client;
+    }
 
+    /**
+     * Parse and process request and response.
+     */
+    public function process(): void
+    {
+        if ($message = Application::$security->get_message()) {
+            $this->response = $this->process_message($message);
+        }
 
-	/**
-	 * Assigning class properties.
-	 *
-	 * @param   object  $client    Instance of Client class
-	 * @return  void
-	 */
-	public function __construct(Client $client)
-	{
-		$this->client = $client;
-	}
+        if (Application::$security->get_action() == 'deny') {
+            Application::$log->warning('Access denied by security');
 
-	/**
-	 * Parse and process request and response.
-	 *
-	 * @return  void
-	 */
-	public function process()
-	{
-		if ($message = Application::$security->get_message())
-		{
-			$this->response = $this->process_message($message);
-		}
+            return;
+        }
 
-		if (Application::$security->get_action() == 'deny')
-		{
-			Application::$log->warning('Access denied by security');
+        $this->define_data_section();
+        $this->define_data_formats();
 
-			return;
-		}
+        Application::$log->debug('Request processed');
 
-		$this->define_data_section();
-		$this->define_data_formats();
+        if (isset($this->data_section['storage']) && is_array($this->data_section['storage'])) {
+            if (!empty($this->request)) {
+                $storage = new Storage($this->client, $this->data_section['storage']);
 
-		Application::$log->debug('Request processed');
+                $this->response_array = $storage->get($this->request);
+            }
+        }
 
-		if (isset($this->data_section['storage']) AND is_array($this->data_section['storage']))
-		{
-			if (!empty($this->request))
-			{
-				$storage = new Storage($this->client, $this->data_section['storage']);
+        $this->process_response_array();
+        $this->process_response();
 
-				$this->response_array = $storage->get($this->request);
-			}
-		}
+        Application::$log->debug('Response processed');
+    }
 
-		$this->process_response_array();
-		$this->process_response();
+    /**
+     * Search and define section data.
+     */
+    private function define_data_section(): void
+    {
+        $data = Application::$config->get('data');
 
-		Application::$log->debug('Response processed');
-	}
+        foreach ($data as $section) {
+            if (!isset($section['flag']) || !isset($section['fields'])) {
+                continue;
+            }
 
-	/**
-	 * Search and define section data.
-	 *
-	 * @return  void
-	 */
-	private function define_data_section()
-	{
-		$data = Application::$config->get('data');
+            if (!empty($section['flag']) && $this->find_flag($section['flag'])) {
+                $this->data_section = $section;
+            }
+        }
 
-		foreach ($data as $section)
-		{
-			if (!isset($section['flag']) OR !isset($section['fields']))
-			{
-				continue;
-			}
+        if (is_null($this->data_section)) {
+            $this->data_section = array_shift($data);
+        }
+    }
 
-			if (!empty($section['flag']) AND $this->find_flag($section['flag']))
-			{
-				$this->data_section = $section;
-			}
-		}
+    /**
+     * Search and define data formats.
+     */
+    private function define_data_formats(): void
+    {
+        if (!isset($this->data_section['format']) || !is_array($this->data_section['format'])) {
+            return;
+        }
 
-		if (is_null($this->data_section))
-		{
-			$this->data_section = array_shift($data);
-		}
-	}
+        $data_formats = [];
 
-	/**
-	 * Search and define data formats.
-	 *
-	 * @return  void
-	 */
-	private function define_data_formats()
-	{
-		if (!isset($this->data_section['format']) OR !is_array($this->data_section['format']))
-		{
-			return;
-		}
+        foreach ($this->data_section['format'] as $key => $section) {
+            if (!isset($section[2]) || empty($section[2])) {
+                $data_formats[$key] = $section;
+            } elseif ($this->find_flag($section[2])) {
+                $data_formats[$key] = $section;
+            }
+        }
 
-		$data_formats = [];
+        if (!empty($data_formats)) {
+            $this->data_formats = $data_formats;
+        }
+    }
 
-		foreach ($this->data_section['format'] as $key => $section)
-		{
-			if (!isset($section[2]) OR empty($section[2]))
-			{
-				$data_formats[$key] = $section;
-			}
-			else if ($this->find_flag($section[2]))
-			{
-				$data_formats[$key] = $section;
-			}
-		}
+    /**
+     * Find flag in request string.
+     */
+    private function find_flag(string $flag): bool
+    {
+        if (preg_match('/\s+'.preg_quote($flag).'\s+/', ' '.$this->request.' ')) {
+            $this->request = preg_replace('/\s+'.preg_quote($flag).'\s+/', ' ', ' '.$this->request.' ', 1);
+            $this->request = trim($this->request);
 
-		if (!empty($data_formats))
-		{
-			$this->data_formats = $data_formats;
-		}
-	}
+            return true;
+        }
 
-	/**
-	 * Find flag in request string.
-	 *
-	 * @param   string  $flag  Flag string to search
-	 * @return  bool
-	 */
-	private function find_flag($flag)
-	{
-		if (preg_match('/\s+'.preg_quote($flag).'\s+/', ' '.$this->request.' '))
-		{
-			$this->request = preg_replace('/\s+'.preg_quote($flag).'\s+/', ' ', ' '.$this->request.' ', 1);
-			$this->request = trim($this->request);
+        return false;
+    }
 
-			return TRUE;
-		}
-
-		return FALSE;
-	}
-
-	/**
-	 * Sets current request string
-	 *
-	 * @param   string  $request  Request string to set
-	 * @return  void
-	 */
-	public function set_request($request)
-	{
-		$this->request = $this->complete_request = trim($request);
-	}
-
-} // end of class Request
+    /**
+     * Sets current request string
+     */
+    public function set_request(string $request): void
+    {
+        $this->request = $this->complete_request = trim($request);
+    }
+}

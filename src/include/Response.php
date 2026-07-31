@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HSDN PHP Whois Server Daemon
  *
@@ -9,309 +9,231 @@
 
 namespace pWhoisd;
 
-use pWhoisd\Application;
-
 /**
  * Abstract Response class.
  */
-abstract class Response {
+abstract class Response
+{
+    protected string $request = '';
 
-	/*
-	 * @var  string  Request string
-	 */
-	protected $request;
+    protected string $complete_request = '';
 
-	/*
-	 * @var  string  Complete request string
-	 */
-	protected $complete_request;
+    protected ?array $data_section = null;
 
-	/*
-	 * @var  array   Array of assigned data configuration section
-	 */
-	protected $data_section;
+    protected ?array $data_formats = null;
 
-	/*
-	 * @var  array   Array of assigned formats configuration
-	 */
-	protected $data_formats;
+    protected string $response = '';
 
-	/*
-	 * @var  string  Response string
-	 */
-	protected $response;
+    /*
+     * @var array|bool Response array. May be `false` when Storage::get()
+     * (e.g. a failed/never-connected provider) reported no data at all.
+     */
+    protected array|bool $response_array = [];
 
-	/*
-	 * @var  array   Response array
-	 */
-	protected $response_array;
+    /**
+     * Process response.
+     */
+    protected function process_response(): void
+    {
+        if (!is_array($this->data_section['fields']) || empty($this->data_section['fields'])) {
+            return;
+        }
 
+        $hide_empty = true;
 
-	/**
-	 * Process response.
-	 *
-	 * @return  void
-	 */
-	protected function process_response()
-	{
-		if (!is_array($this->data_section['fields']) OR empty($this->data_section['fields']))
-		{
-			return;
-		}
+        if (isset($this->data_section['hide_empty'])) {
+            $hide_empty = $this->data_section['hide_empty'];
+        }
 
-		$hide_empty = TRUE;
+        $response_array = $response_array_names_len = [];
 
-		if (isset($this->data_section['hide_empty']))
-		{
-			$hide_empty = $this->data_section['hide_empty'];
-		}
+        foreach ($this->data_section['fields'] as $field) {
+            if (!is_array($field)) {
+                continue;
+            }
 
-		$response_array = $response_array_names_len = [];
+            if (empty($field)) {
+                $response_array[] = '';
 
-		foreach ($this->data_section['fields'] as $field)
-		{
-			if (!is_array($field))
-			{
-				continue;
-			}
+                continue;
+            }
 
-			if (empty($field))
-			{
-				$response_array[] = '';
+            $field[0] = $this->process_response_macro($field[0]);
 
-				continue;
-			}
+            if ($field[0] === false) {
+                continue;
+            }
 
-			$field[0] = $this->process_response_macro($field[0]);
+            if (sizeof($field) > 1) {
+                $field_flag = $field[2] ?? null;
 
-			if ($field[0] === FALSE)
-			{
-				continue;
-			}
+                if (isset($this->response_array[$field[1]]) && $this->response_array[$field[1]] !== null) {
+                    if (!empty($this->response_array[$field[1]]) || $hide_empty === false) {
+                        if ($field_flag === null) {
+                            $values = explode("\n", str_replace("\r\n", "\n", $this->response_array[$field[1]]));
 
-			if (sizeof($field) > 1)
-			{
-				$field_flag = isset($field[2]) ? $field[2] : NULL;
+                            if (!preg_match('/\:$/', trim($field[0]))) {
+                                $field[0] .= ':';
+                            }
 
-				if (isset($this->response_array[$field[1]]) AND $this->response_array[$field[1]] !== NULL)
-				{
-					if (!empty($this->response_array[$field[1]]) OR $hide_empty === FALSE)
-					{
-						if ($field_flag === NULL)
-						{
-							$values = explode("\n", str_replace("\r\n", "\n", $this->response_array[$field[1]]));
+                            foreach ($values as $value) {
+                                $response_array[] = [$field[0], $value];
+                            }
 
-							if (!preg_match('/\:$/', trim($field[0])))
-							{
-								$field[0] .= ':';
-							}
+                            $response_array_names_len[] = strlen($field[0]);
+                        } elseif ($field_flag === true) {
+                            $response_array[] = $field[0];
+                        }
+                    }
+                } elseif ($field_flag === false) {
+                    $response_array[] = $field[0];
+                }
+            } else {
+                $response_array[] = $field[0];
+            }
+        }
 
-							foreach ($values as $value)
-							{
-								$response_array[] = [$field[0], $value];
-							}
+        $max_len = 0;
 
-							$response_array_names_len[] = strlen($field[0]);
-						}
-						elseif ($field_flag === TRUE)
-						{
-							$response_array[] = $field[0];
-						}
-					}
-				}
-				elseif ($field_flag === FALSE)
-				{
-					$response_array[] = $field[0];
-				}
-			}
-			else
-			{
-				$response_array[] = $field[0];
-			}
-		}
+        if (!empty($response_array_names_len)) {
+            $max_len = max($response_array_names_len);
+        }
 
-		$max_len = 0;
+        $response = [];
 
-		if (!empty($response_array_names_len))
-		{
-			$max_len = max($response_array_names_len);
-		}
+        foreach ($response_array as $field) {
+            if (is_array($field)) {
+                if (isset($this->data_section['spacing']) && $this->data_section['spacing']) {
+                    $response[] = $field[0].' '.str_repeat(' ', $max_len - strlen($field[0])).$field[1];
+                } else {
+                    $response[] = $field[0].$field[1];
+                }
+            } else {
+                $response[] = $field;
+            }
+        }
 
-		$response = [];
+        // Show invalid_request message
+        if ((empty($this->complete_request) && empty($this->response_array)) || empty($response)) {
+            $invalid_request = ['Invalid request.'];
 
-		foreach ($response_array as $field)
-		{
-			if (is_array($field))
-			{
-				if (isset($this->data_section['spacing']) AND $this->data_section['spacing'])
-				{
-					$response[] = $field[0].' '.str_repeat(' ', $max_len - strlen($field[0])).$field[1];
-				}
-				else
-				{
-					$response[] = $field[0].$field[1];
-				}
-			}
-			else
-			{
-				$response[] = $field;
-			}
-		}
+            if (isset($this->data_section['invalid_request'])) {
+                $invalid_request = $this->data_section['invalid_request'];
+            }
 
-		// Show invalid_request message
-		if ((empty($this->complete_request) AND empty($this->response_array)) OR empty($response))
-		{
-			$invalid_request = ['Invalid request.'];
+            $response = [$this->process_message($invalid_request)];
+        }
 
-			if (isset($this->data_section['invalid_request']))
-			{
-				$invalid_request = $this->data_section['invalid_request'];
-			}
+        $this->response = implode("\n", $response);
+    }
 
-			$response = [$this->process_message($invalid_request)];
-		}
+    /**
+     * Process response array.
+     */
+    protected function process_response_array(): void
+    {
+        if (!is_array($this->response_array) || empty($this->response_array)) {
+            return;
+        }
 
-		$this->response = implode("\n", $response);
-	}
+        if (is_array($this->data_formats) && !empty($this->data_formats)) {
+            foreach ($this->data_formats as $data_format) {
+                if (sizeof($data_format) < 2) {
+                    continue;
+                }
 
-	/**
-	 * Process response array.
-	 *
-	 * @return  void
-	 */
-	protected function process_response_array()
-	{
-		if (!is_array($this->response_array) OR empty($this->response_array))
-		{
-			return;
-		}
+                @[$field, $format] = $data_format;
 
-		if (is_array($this->data_formats) AND !empty($this->data_formats))
-		{
-			foreach ($this->data_formats as $data_format)
-			{
-				if (sizeof($data_format) < 2)
-				{
-					continue;
-				}
+                if (($eval = $this->process_response_macro($format, true)) === false) {
+                    continue;
+                }
 
-				@list($field, $format) = $data_format;
+                if (!empty($eval)) {
+                    eval("\$format = $eval;");
+                }
 
-				if (($eval = $this->process_response_macro($format, TRUE)) === FALSE)
-				{
-					continue;
-				}
+                if (isset($this->response_array[$field]) && $this->response_array[$field] == '0000-00-00 00:00:00') {
+                    $this->response_array[$field] = '';
+                } else {
+                    $this->response_array[$field] = trim($format);
+                }
+            }
+        }
+    }
 
-				if (!empty($eval))
-				{
-					eval("\$format = $eval;");
-				}
+    /**
+     * Process message.
+     *
+     * @param string|array $message Message string (or lines) to process
+     */
+    protected function process_message(string|array $message, bool $quote = false, bool $recursion = true): string
+    {
+        if (!is_array($message)) {
+            $message = [$message];
+        }
 
-				if (isset($this->response_array[$field]) AND $this->response_array[$field] == '0000-00-00 00:00:00')
-				{
-					$this->response_array[$field] = '';
-				}
-				else
-				{
-					$this->response_array[$field] = trim($format);
-				}
-			}
-		}
-	}
+        $lines = [];
 
-	/**
-	 * Process message.
-	 *
-	 * @param   string  $message    Message string to process
-	 * @param   string  $recursion  Enables recursions in 'process_response_macro' method
-	 * @return  string
-	 */
-	protected function process_message($message, $quote = FALSE, $recursion = TRUE)
-	{
-		if (!is_array($message))
-		{
-			$message = [$message];
-		}
+        foreach ($message as $line) {
+            $line = $this->process_response_macro($line, $quote, $recursion);
 
-		$lines = [];
+            if ($line !== false) {
+                $lines[] = $line;
+            }
+        }
 
-		foreach ($message as $line)
-		{
-			$line = $this->process_response_macro($line, $quote, $recursion);
+        return implode("\n", $lines);
+    }
 
-			if ($line !== FALSE)
-			{
-				$lines[] = $line;
-			}
-		}
+    /**
+     * Process macro in response string.
+     */
+    protected function process_response_macro(string $string, bool $quote = false, bool $recursion = true): string|false
+    {
+        // System macro
+        $macros = [
+            '_request_' => $this->request,
+            '_client_ip_' => $this->client->get_address(),
+            '_client_port_' => $this->client->get_port(),
+        ];
 
-		return implode("\n", $lines);
-	}
+        // Messages based macro
+        foreach (Application::$config->get('messages') as $message_key => $message_value) {
+            $macros['%'.$message_key.'%'] = $message_value;
+        }
 
-	/**
-	 * Process macro in response string.
-	 *
-	 * @param   string  $string     Response string to process
-	 * @param   bool    $quote      Quoting macro value
-	 * @param   string  $recursion  Enables recursions
-	 * @return  string|bool
-	 */
-	protected function process_response_macro($string, $quote = FALSE, $recursion = TRUE)
-	{
-		// System macro
-		$macros = [
-			'_request_'     => $this->request,
-			'_client_ip_'   => $this->client->get_address(),
-			'_client_port_' => $this->client->get_port(),
-		];
+        // Storage response macro
+        if (is_array($this->response_array) && !empty($this->response_array)) {
+            $macros += $this->response_array;
+        }
 
-		// Messages based macro
-		foreach (Application::$config->get('messages') as $message_key => $message_value)
-		{
-			$macros['%'.$message_key.'%'] = $message_value;
-		}
+        foreach ($macros as $macro => $value) {
+            if ($value !== null && strpos($string, '{'.$macro.'}') !== false) {
+                // Recursion
+                if (is_array($value)) {
+                    if ($recursion === false) {
+                        continue;
+                    }
 
-		// Storage response macro
-		if (is_array($this->response_array) AND !empty($this->response_array))
-		{
-			$macros += $this->response_array;
-		}
+                    $value = $this->process_message($value, $quote, false);
+                }
 
-		foreach ($macros as $macro => $value)
-		{
-			if ($value !== NULL AND strpos($string, '{'.$macro.'}') !== FALSE)
-			{
-				// Recursion
-				if (is_array($value))
-				{
-					if ($recursion === FALSE)
-					{
-						continue;
-					}
+                if ($quote) {
+                    $value = '"'.$value.'"';
+                }
 
-					$value = $this->process_message($value, $quote, FALSE);
-				}
+                $string = str_replace('{'.$macro.'}', $value, $string);
+            }
+        }
 
-				if ($quote)
-				{
-					$value = '"'.$value.'"';
-				}
+        return !preg_match('/\{[\%\w]+\}/', $string) ? $string : false;
+    }
 
-				$string = str_replace('{'.$macro.'}', $value, $string);
-			}
-		}
-
-		return !preg_match('/\{[\%\w]+\}/', $string) ? $string : FALSE;
-	}
-
-	/**
-	 * Gets response string.
-	 *
-	 * @return  string
-	 */
-	public function get_response()
-	{
-		return $this->response;
-	}
-
-} // end of class Response
+    /**
+     * Gets response string.
+     */
+    public function get_response(): string
+    {
+        return $this->response;
+    }
+}
