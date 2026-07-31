@@ -37,6 +37,34 @@ return [
 		'file'     => FALSE,
 	],
 
+	// Cache configuration
+	//
+	// Caches Storage results (any data source - psql/pdo/mysql/file) keyed on
+	// the request string, so a repeated lookup of the same domain within the
+	// TTL skips the database/file read entirely. Disabled by default; a cache
+	// outage never takes the WHOIS server itself down (it just falls back to
+	// reading storage directly).
+	'cache' =>
+	[
+		// Enable caching. Off by default - opt in per environment.
+		'enabled'  => FALSE,
+
+		// Driver: 'redis' or 'file'.
+		'driver'   => 'redis',
+
+		// How long a cached result stays valid, in seconds.
+		'ttl'      => 3600,
+
+		// --- 'redis' driver ---
+		'host'     => '127.0.0.1',
+		'port'     => 6379,
+		'password' => NULL,
+		'database' => 0,
+
+		// --- 'file' driver ---
+		'path'     => sys_get_temp_dir().'/pwhoisd-cache',
+	],
+
 	// Security configuration
 	'security' =>
 	[
