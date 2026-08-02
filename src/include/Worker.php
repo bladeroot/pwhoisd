@@ -47,7 +47,7 @@ class Worker
 
             try {
                 if (Application::$security->get_action() == 'drop') {
-                    Application::$log->warning('Connection dropped by security');
+                    Application::$log->warning('[' . $this->client->get_address() . '] Connection dropped by security');
 
                     return true;
                 }
@@ -67,7 +67,7 @@ class Worker
             return true;
         }
 
-        Application::$log->warning('Request is not readed from client socket');
+        Application::$log->warning('[' . $this->client->get_address() . '] Request is not readed from client socket');
 
         return false;
     }
