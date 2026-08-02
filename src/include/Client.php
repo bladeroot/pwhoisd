@@ -62,10 +62,23 @@ class Client
             return null;
         }
 
-        Application::$log->info('[' . $this->address . '] Request Recieved: ' . trim($buffer));
-        Application::$log->debug('Request readed from client socket: ' . $buffer);
+        Application::$log->info('[' . $this->address . '] Request Recieved: ' . $this->sanitize_for_log(trim($buffer)));
+        Application::$log->debug('Request readed from client socket: ' . $this->sanitize_for_log($buffer));
 
         return $buffer;
+    }
+
+    /**
+     * Strips control characters (including ESC, which starts ANSI escape
+     * sequences) from untrusted client input before it goes into the log.
+     * WHOIS is a raw TCP protocol with no input validation, so whatever a
+     * client sends - garbage, a TLS ClientHello, deliberately crafted
+     * terminal escape sequences - gets logged verbatim otherwise, which can
+     * corrupt or attack the terminal of whoever is tailing the logs.
+     */
+    private function sanitize_for_log(string $string): string
+    {
+        return preg_replace('/[\x00-\x1F\x7F]/', '', $string);
     }
 
     /**
