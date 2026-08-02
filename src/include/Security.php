@@ -48,7 +48,7 @@ class Security
 
     private array $rules;
 
-    private string|false|null $message = null;
+    private string|array|false|null $message = null;
 
     private ?string $action = null;
 
@@ -298,7 +298,7 @@ class Security
     /**
      * Gets message sent to client.
      */
-    public function get_message(): string|false|null
+    public function get_message(): string|array|false|null
     {
         return $this->message;
     }
