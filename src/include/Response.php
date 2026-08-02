@@ -70,7 +70,12 @@ abstract class Response
                 if (isset($this->response_array[$field[1]]) && $this->response_array[$field[1]] !== null) {
                     if (!empty($this->response_array[$field[1]]) || $hide_empty === false) {
                         if ($field_flag === null) {
-                            $values = explode("\n", str_replace("\r\n", "\n", $this->response_array[$field[1]]));
+                            // response_array values can be non-string scalars
+                            // (e.g. an int ID) - PDO's pgsql driver returns
+                            // native types for integer columns, unlike
+                            // PsqlProvider's pg_fetch_assoc() which always
+                            // stringifies.
+                            $values = explode("\n", str_replace("\r\n", "\n", (string) $this->response_array[$field[1]]));
 
                             if (!preg_match('/\:$/', trim($field[0]))) {
                                 $field[0] .= ':';
@@ -222,7 +227,7 @@ abstract class Response
                     $value = '"' . $value . '"';
                 }
 
-                $string = str_replace('{' . $macro . '}', $value, $string);
+                $string = str_replace('{' . $macro . '}', (string) $value, $string);
             }
         }
 

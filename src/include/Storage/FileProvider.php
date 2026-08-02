@@ -116,7 +116,8 @@ class FileProvider implements StorageInterface
 
         foreach ($macros as $macro => $value) {
             if (strpos($string, '{' . $macro . '}') !== false) {
-                $string = str_replace('{' . $macro . '}', $value, $string);
+                // $value can be a non-string scalar from $this->result_array.
+                $string = str_replace('{' . $macro . '}', (string) $value, $string);
             }
         }
 
