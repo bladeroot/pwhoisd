@@ -134,7 +134,11 @@ class PdoProvider implements StorageInterface
 
         foreach ($macros as $macro => $value) {
             if (strpos($string, "{{$macro}}") !== false) {
-                $value = mb_strtolower($value);
+                // $value can be a non-string scalar (e.g. an int contact ID)
+                // when it comes from $this->result_array - unlike PsqlProvider
+                // (pg_fetch_assoc always stringifies), PDO's pgsql driver
+                // returns native types for integer/numeric columns.
+                $value = mb_strtolower((string) $value);
                 $string = str_replace("{{$macro}}", $this->db->quote($value), $string);
             }
         }

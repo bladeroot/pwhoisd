@@ -129,7 +129,9 @@ class MysqlProvider implements StorageInterface
 
         foreach ($macros as $macro => $value) {
             if (strpos($string, '{' . $macro . '}') !== false) {
-                $string = str_replace('{' . $macro . '}', $this->db->real_escape_string($value), $string);
+                // $value can be a non-string scalar (e.g. an int ID) from
+                // $this->result_array - real_escape_string() requires string.
+                $string = str_replace('{' . $macro . '}', $this->db->real_escape_string((string) $value), $string);
             }
         }
 

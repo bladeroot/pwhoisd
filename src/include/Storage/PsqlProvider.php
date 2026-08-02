@@ -144,7 +144,10 @@ class PsqlProvider implements StorageInterface
 
         foreach ($macros as $macro => $value) {
             if (strpos($string, '{' . $macro . '}') !== false) {
-                $string = str_replace('{' . $macro . '}', pg_escape_string($this->db, mb_strtolower($value)), $string);
+                // $value can be a non-string scalar from $this->resultArray
+                // (e.g. an int ID) in principle, even though pg_fetch_assoc
+                // itself always returns strings today.
+                $string = str_replace('{' . $macro . '}', pg_escape_string($this->db, mb_strtolower((string) $value)), $string);
             }
         }
 
