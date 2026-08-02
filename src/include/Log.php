@@ -40,7 +40,7 @@ class Log extends LogAbstract
     {
         $message = '[' . $this->severities[$severity][0] . '] ' . $message;
 
-        if ($severity < self::debug || $this->severity >= self::debug) {
+        if ($this->severity && $severity <= $this->severity) {
             Console::log($message, $this->severities[$severity][1]);
         }
 
