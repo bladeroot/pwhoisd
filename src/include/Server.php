@@ -84,7 +84,7 @@ class Server
             }
 
             if (count($worker_processes) > Application::$config->get('daemon.workers')) {
-                Application::$log->warning('Workers limit exceded');
+                Application::$log->warning('[' . $client->get_address() . '] Workers limit exceded');
 
                 $client->close();
 

@@ -31,7 +31,7 @@ class Request extends Response
         }
 
         if (Application::$security->get_action() == 'deny') {
-            Application::$log->warning('Access denied by security');
+            Application::$log->warning('[' . $this->client->get_address() . '] Access denied by security');
 
             return;
         }
