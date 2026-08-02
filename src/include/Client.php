@@ -14,6 +14,15 @@ namespace pWhoisd;
  */
 class Client
 {
+    /**
+     * Seconds a connected client has to send its request before being
+     * disconnected. Applied both as the accepted socket's own SO_RCVTIMEO
+     * (so a blocking socket_read() in read() can't hang forever on a
+     * client that connects and then sends nothing) and as Worker::loop()'s
+     * overall deadline for receiving a full request.
+     */
+    public const READ_TIMEOUT = 3;
+
     /*
      * @var resource|\Socket Worker socket resource. Untyped: PHP has no
      * "resource" type declaration, and PHP 8+ represents an accepted
@@ -33,6 +42,16 @@ class Client
     public function __construct($socket)
     {
         $this->socket = $socket;
+
+        // Accepted sockets don't inherit the listening socket's options, so
+        // without this a client that connects and never sends anything
+        // would block socket_read() indefinitely - the daemon forks a
+        // worker per connection, so that's an easy resource-exhaustion
+        // vector otherwise.
+        socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO, [
+            'sec'  => self::READ_TIMEOUT,
+            'usec' => 0,
+        ]);
 
         @socket_getpeername($this->socket, $this->address, $this->port);
 
@@ -54,31 +73,59 @@ class Client
     }
 
     /**
-     * Reads data from socket
+     * Reads data from socket.
+     *
+     * Returns null while there's nothing to read yet (caller keeps
+     * polling), false if a malformed (non-WHOIS) request was rejected and
+     * the client blocked - caller should drop the connection without
+     * processing it - or the raw request string otherwise.
      */
-    public function read(int $len = 1024): ?string
+    public function read(int $len = 1024): string|false|null
     {
         if (($buffer = @socket_read($this->socket, $len, PHP_BINARY_READ)) === false) {
             return null;
         }
 
-        Application::$log->info('[' . $this->address . '] Request Recieved: ' . $this->sanitize_for_log(trim($buffer)));
-        Application::$log->debug('Request readed from client socket: ' . $this->sanitize_for_log($buffer));
+        $request = trim($buffer);
+
+        if (!$this->is_valid_request($request)) {
+            Application::$log->warning('[' . $this->address . '] Malformed request (' . strlen($buffer) . ' bytes, not printable ASCII) - dropping connection and blocking client');
+
+            Application::$blocklist->block($this->address);
+            $this->send($this->invalid_request_message());
+
+            return false;
+        }
+
+        Application::$log->info('[' . $this->address . '] Request Recieved: ' . $request);
+        Application::$log->debug('Request readed from client socket: ' . $request);
 
         return $buffer;
     }
 
     /**
-     * Strips control characters (including ESC, which starts ANSI escape
-     * sequences) from untrusted client input before it goes into the log.
-     * WHOIS is a raw TCP protocol with no input validation, so whatever a
-     * client sends - garbage, a TLS ClientHello, deliberately crafted
-     * terminal escape sequences - gets logged verbatim otherwise, which can
-     * corrupt or attack the terminal of whoever is tailing the logs.
+     * A WHOIS request here is a domain name or a help/flag token - always
+     * printable ASCII. Anything else (a TLS ClientHello, other binary
+     * probes sent straight to the raw TCP port, deliberately crafted
+     * terminal escape sequences) is rejected outright: it can't match a
+     * real query, would otherwise get logged verbatim and could corrupt or
+     * attack the terminal of whoever is tailing the logs.
      */
-    private function sanitize_for_log(string $string): string
+    private function is_valid_request(string $string): bool
     {
-        return preg_replace('/[\x00-\x1F\x7F]/', '', $string);
+        return $string === '' || preg_match('/^[\x20-\x7E]+$/', $string) === 1;
+    }
+
+    /**
+     * Message explaining to the client why its connection was blocked,
+     * configurable via messages.invalid_data (same array-of-lines format as
+     * Security's messages).
+     */
+    private function invalid_request_message(): string
+    {
+        $message = Application::$config->get('messages.invalid_data', 'Invalid request format. This connection has been blocked.');
+
+        return is_array($message) ? implode("\n", $message) : (string) $message;
     }
 
     /**

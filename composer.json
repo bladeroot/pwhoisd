@@ -34,5 +34,16 @@
         "psr-4": {
             "pwhoisd\\": "src"
         }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PWhoisdTest\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "scripts": {
+        "test": "phpunit"
     }
 }

@@ -81,6 +81,15 @@ class Security
         $this->action = null;
         $this->intervals = [];
 
+        // A client previously caught sending a malformed (non-WHOIS)
+        // request - see Client::read() - is dropped immediately, before
+        // the configured rules below even run.
+        if (Application::$blocklist->is_blocked($this->client->get_address())) {
+            $this->action = 'drop';
+
+            return;
+        }
+
         foreach (array_reverse($this->rules) as $rule) {
             if ($this->process_conditions($rule['conditions'])) {
                 $this->message = Application::$config->get('messages.' . $rule['message'], false);

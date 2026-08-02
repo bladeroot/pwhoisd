@@ -32,13 +32,17 @@ class Worker
      */
     public function loop(): bool
     {
-        $time = time() + 3;
+        $time = time() + Client::READ_TIMEOUT;
 
         while ($time > time()) {
             $read = $this->client->read();
 
             if ($read === null) {
                 continue;
+            }
+
+            if ($read === false) {
+                return true; // Malformed request - already logged and blocked in Client::read()
             }
 
             try {

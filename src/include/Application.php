@@ -26,6 +26,8 @@ class Application extends Daemon
 
     public static ?Cache $cache = null;
 
+    public static ?Blocklist $blocklist = null;
+
     public static ?Security $security = null;
 
     public static ?Server $server = null;
@@ -48,6 +50,7 @@ class Application extends Daemon
         self::$config = new Config();
         self::$log = new Log();
         self::$cache = new Cache();
+        self::$blocklist = new Blocklist();
         self::$security = new Security();
         self::$server = new Server();
 
