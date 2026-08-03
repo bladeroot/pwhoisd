@@ -7,6 +7,7 @@ use pWhoisd\Storage\FileProvider;
 use pWhoisd\Storage\MysqlProvider;
 use pWhoisd\Storage\PdoProvider;
 use pWhoisd\Storage\PsqlProvider;
+use pWhoisd\Storage\StaticProvider;
 use pWhoisd\Storage\StorageInterface;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -95,16 +96,18 @@ final class StorageProviderContractTest extends TestCase
             [PdoProvider::class],
             [MysqlProvider::class],
             [FileProvider::class],
+            [StaticProvider::class],
         ];
     }
 
     public static function knownStorageTypes(): array
     {
         return [
-            'psql'  => ['psql', PsqlProvider::class],
-            'pdo'   => ['pdo', PdoProvider::class],
-            'mysql' => ['mysql', MysqlProvider::class],
-            'file'  => ['file', FileProvider::class],
+            'psql'   => ['psql', PsqlProvider::class],
+            'pdo'    => ['pdo', PdoProvider::class],
+            'mysql'  => ['mysql', MysqlProvider::class],
+            'file'   => ['file', FileProvider::class],
+            'static' => ['static', StaticProvider::class],
         ];
     }
 
