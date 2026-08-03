@@ -111,7 +111,10 @@ abstract class Response
                 if (isset($this->data_section['spacing']) && $this->data_section['spacing']) {
                     $response[] = $field[0] . ' ' . str_repeat(' ', $max_len - strlen($field[0])) . $field[1];
                 } else {
-                    $response[] = $field[0] . $field[1];
+                    // Always at least one space after "Label:" - real WHOIS
+                    // output is never "Label:value" - just skips the column
+                    // alignment 'spacing' => TRUE adds on top of that.
+                    $response[] = $field[0] . ' ' . $field[1];
                 }
             } else {
                 $response[] = $field;
