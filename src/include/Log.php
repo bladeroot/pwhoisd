@@ -38,14 +38,14 @@ class Log extends LogAbstract
      */
     public function add(string $message, int $severity = self::info): void
     {
-        $message = '[' . $this->severities[$severity][0] . '] ' . $message;
+        $message = '[' . date('Y-m-d H:i:s') . '] [' . $this->severities[$severity][0] . '] ' . $message;
 
         if ($this->severity && $severity <= $this->severity) {
             Console::log($message, $this->severities[$severity][1]);
         }
 
         if ($this->severity && $this->file && $severity <= $this->severity) {
-            @file_put_contents($this->file, '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL, FILE_APPEND);
+            @file_put_contents($this->file, $message . PHP_EOL, FILE_APPEND);
         }
     }
 
