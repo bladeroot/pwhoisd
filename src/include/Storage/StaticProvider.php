@@ -4,7 +4,6 @@
  *
  * @author      HiQDev Team
  * @author      bladeroot@gmail.com
- * @copyright   (c) 2015, Information Networks Ltd.
  * @copyright   (c) 2026, bladeroot@gmail.com
  * @link        http://www.hsdn.org
  */
